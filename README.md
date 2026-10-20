@@ -1,0 +1,51 @@
+# Railnote
+
+Open-source Markdown notes that work the moment you open them.
+
+Railnote keeps the part of Obsidian people love (a folder of plain `.md` files you own) and fixes the parts they complain about: the setup, the plugin hunt, the filing paralysis, and the missing AI. It opens an existing Obsidian vault as is.
+
+## What it fixes
+
+| Common complaint | What Railnote does |
+|---|---|
+| Hours of setup and plugin hunting before it's useful | One click creates a starter vault with an inbox, daily notes, templates and a welcome note. Daily notes, tasks, templates, search, backlinks and an outline are built in. |
+| "Where does this note go?" | New notes land in `Inbox/`. **Organize** asks Claude for a folder, tags and related notes; you tick what to apply. |
+| No built-in AI | **Ask** answers questions from your own notes and cites them as `[[links]]`. Search runs locally; only the best-matching passages are sent. |
+| Tasks scattered across notes | The **Tasks** view collects every `- [ ]` in the vault. Ticking one edits the file. |
+| Lock-in, agents, open source | Plain Markdown, Obsidian syntax (wikilinks, aliases, embeds, frontmatter, `#tags`), `.obsidian/` ignored, edits made by other apps or agents appear live, MIT licensed. Renames rewrite links across the vault. Deletes go to `.trash/`. |
+
+Explainers: a ```` ```canviz ```` block or `![[file.canviz]]` embed plays an animated openCanviz explainer inline (needs the openCanviz engine checkout at build time; without it the block shows a notice).
+
+## Keys
+
+| Key | Action |
+|---|---|
+| ⌘K | Jump to a note, or create one |
+| ⌘P | Command palette |
+| ⌘N | New note in Inbox |
+| ⌘D | Today's note |
+| ⌘T | Insert template |
+| ⇧⌘F | Search all notes |
+| ⇧⌘O | Organize this note |
+| ⌘J | Ask your notes |
+| ⌘, | Settings |
+
+## Claude
+
+Set an Anthropic API key in Settings (or `ANTHROPIC_API_KEY`). The key is stored in the app's data folder with owner-only permissions and never reaches the page. The default model is `claude-opus-5-5`, changeable in Settings. Requests enable the API's server-side fallback, so a request the primary model declines can be retried by a fallback model.
+
+## Develop
+
+```bash
+npm install
+npm run dev     # Vite + Electron with reload
+npm start       # production build, then run
+```
+
+Set `OPENCANVIZ_APP` to an openCanviz app checkout to build with explainer playback (defaults to `~/animated-diagram-editor-app`).
+
+The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`, so a web or sync build can supply its own host.
+
+## License
+
+MIT

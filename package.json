@@ -1,0 +1,43 @@
+{
+  "name": "railnote",
+  "version": "0.1.0",
+  "description": "Open-source Markdown notes that work out of the box",
+  "license": "MIT",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build:electron": "node scripts/build-electron.mjs",
+    "build:renderer": "vite build",
+    "build": "tsc --noEmit && npm run build:electron && npm run build:renderer",
+    "start": "npm run build && electron .",
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env RAILNOTE_DEV=1 electron .\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.136.0",
+    "chokidar": "^3.6.0"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.16.0",
+    "@codemirror/commands": "^6.5.0",
+    "@codemirror/lang-markdown": "^6.2.5",
+    "@codemirror/language": "^6.10.1",
+    "@codemirror/language-data": "^6.5.1",
+    "@codemirror/search": "^6.5.6",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.26.3",
+    "@lezer/highlight": "^1.2.0",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^44.9.2",
+    "esbuild": "^0.20.2",
+    "minisearch": "^6.3.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.0",
+    "wait-on": "^7.2.0"
+  }
+}
