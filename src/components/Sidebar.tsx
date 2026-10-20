@@ -57,25 +57,17 @@ export function Sidebar(p: Props) {
     return n;
   });
 
-  const renderTree = (t: Tree, prefix: string, depth: number): JSX.Element[] => {
+  // The tree is drawn as a line map: each folder is a line, each note a stop on it.
+  const stopX = (depth: number) => 20 + Math.max(depth - 1, 0) * 14;
+  const renderTree = (t: Tree, prefix: string, depth: number, line = "var(--line-0)"): JSX.Element[] => {
     const out: JSX.Element[] = [];
-    for (const [name, sub] of [...t.folders].sort((a, b) => a[0].localeCompare(b[0]))) {
-      const key = prefix ? `${prefix}/${name}` : name;
-      const isClosed = closed.has(key);
-      out.push(
-        <div key={"d:" + key} className="tree-folder" style={{ paddingLeft: 10 + depth * 12 }} onClick={() => toggle(key)}>
-          <span className="caret">{isClosed ? "▸" : "▾"}</span>
-          {name}
-        </div>,
-      );
-      if (!isClosed) out.push(...renderTree(sub, key, depth + 1));
-    }
-    for (const n of t.notes.sort((a, b) => a.name.localeCompare(b.name))) {
+    const sorted = t.notes.sort((a, b) => a.name.localeCompare(b.name));
+    sorted.forEach((n, i) => {
       out.push(
         <div
           key={n.path}
-          className={`tree-note${n.path === p.current && p.view === "note" ? " active" : ""}`}
-          style={{ paddingLeft: 22 + depth * 12 }}
+          className={`tree-note${n.path === p.current && p.view === "note" ? " active" : ""}${i === sorted.length - 1 ? " last" : ""}`}
+          style={{ "--x": `${stopX(depth)}px`, "--track": line } as React.CSSProperties}
           onClick={() => p.onOpen(n.path)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -86,7 +78,24 @@ export function Sidebar(p: Props) {
           {n.name}
         </div>,
       );
-    }
+    });
+    [...t.folders].sort((a, b) => a[0].localeCompare(b[0])).forEach(([name, sub], i) => {
+      const key = prefix ? `${prefix}/${name}` : name;
+      const isClosed = closed.has(key);
+      const color = depth === 0 ? `var(--line-${(i % 4) + 1})` : line;
+      out.push(
+        <div
+          key={"d:" + key}
+          className={`tree-folder${isClosed ? " closed" : ""}`}
+          style={{ "--x": `${stopX(depth + 1)}px`, "--track": color } as React.CSSProperties}
+          onClick={() => toggle(key)}
+          title={isClosed ? "Show notes" : "Hide notes"}
+        >
+          {name}
+        </div>,
+      );
+      if (!isClosed) out.push(...renderTree(sub, key, depth + 1, color));
+    });
     return out;
   };
 
@@ -94,13 +103,13 @@ export function Sidebar(p: Props) {
     <aside className="sidebar">
       <div className="drag-region" />
       <div className="nav">
-        <button onClick={p.onNew} title="New note (Cmd+N)">＋ New note</button>
-        <button onClick={p.onDaily} title="Today's note (Cmd+D)">◷ Today</button>
+        <button className="nav-new" onClick={p.onNew} title="New note in the inbox (⌘N)">New note</button>
+        <button onClick={p.onDaily} title="Today's note (⌘D)">Today</button>
         <button className={p.view === "inbox" ? "on" : ""} onClick={() => p.onView("inbox")}>
-          ⇣ Inbox {inboxCount > 0 && <span className="count">{inboxCount}</span>}
+          Inbox {inboxCount > 0 && <span className="count">{inboxCount}</span>}
         </button>
         <button className={p.view === "tasks" ? "on" : ""} onClick={() => p.onView("tasks")}>
-          ☑ Tasks {openTasks > 0 && <span className="count">{openTasks}</span>}
+          Tasks {openTasks > 0 && <span className="count">{openTasks}</span>}
         </button>
       </div>
       <div className="tabs">
@@ -137,7 +146,7 @@ export function Sidebar(p: Props) {
           ))}
       </div>
       <div className="side-foot">
-        <button onClick={p.onSettings}>⚙ Settings</button>
+        <button onClick={p.onSettings}>Settings</button>
       </div>
     </aside>
   );

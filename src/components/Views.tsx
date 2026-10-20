@@ -48,7 +48,7 @@ export function InboxView({ ws, onOpen, onOrganize, onNew }: { ws: Workspace; on
     <div className="page">
       <div className="page-head">
         <h1>Inbox</h1>
-        <button className="primary" onClick={onNew}>＋ Capture</button>
+        <button className="primary" onClick={onNew}>Capture a note</button>
       </div>
       <p className="muted">Write first, file later. Organize asks Claude where a note belongs; you approve each change.</p>
       {!notes.length && <div className="empty">Inbox zero.</div>}
@@ -58,7 +58,7 @@ export function InboxView({ ws, onOpen, onOrganize, onNew }: { ws: Workspace; on
             <div className="inbox-name">{n.name}</div>
             <div className="inbox-preview">{n.content.slice(n.parsed.bodyStart).replace(/[#*>`\-\[\]]/g, "").trim().slice(0, 160) || "Empty"}</div>
           </div>
-          <button onClick={() => onOrganize(n.path)}>✦ Organize</button>
+          <button onClick={() => onOrganize(n.path)}>Organize</button>
         </div>
       ))}
     </div>
@@ -104,7 +104,7 @@ export function OrganizeDialog({ ws, path, onClose, onDone }: { ws: Workspace; p
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div className="dialog" onMouseDown={(e) => e.stopPropagation()}>
-        <h3>✦ Organize “{note?.name}”</h3>
+        <h3>Organize “{note?.name}”</h3>
         {!s && !err && <div className="muted">Asking Claude…</div>}
         {err && <div className="error">{err}</div>}
         {s && (

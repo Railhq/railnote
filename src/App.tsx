@@ -285,7 +285,7 @@ export function App() {
                   }
                 }}
               />
-              <button className="ghost" title="Organize with Claude (⇧⌘O)" onClick={() => organize(current)}>✦ Organize</button>
+              <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => organize(current)}>Organize</button>
             </div>
             {conflict && (
               <div className="banner">
@@ -331,7 +331,7 @@ export function App() {
           <div className="empty-main">
             <p>No note open.</p>
             <button onClick={newNote}>New note</button> <button onClick={daily}>Today's note</button>
-            <p className="muted small">⌘K to jump to any note · ⌘P for every command</p>
+            <p className="muted small">Press ⌘K to jump to any note, or ⌘P for every command.</p>
           </div>
         )}
       </main>

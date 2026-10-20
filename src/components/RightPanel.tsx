@@ -19,7 +19,7 @@ export function RightPanel(p: Props) {
       <div className="tabs">
         {(["links", "outline", "ask"] as const).map((t) => (
           <button key={t} className={p.tab === t ? "on" : ""} onClick={() => p.onTab(t)}>
-            {t === "ask" ? "✦ Ask" : t[0].toUpperCase() + t.slice(1)}
+            {t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>

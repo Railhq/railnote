@@ -23,5 +23,6 @@ export default defineConfig({
     },
   },
   server: { port: 5199, strictPort: true, fs: { allow: [".", APP] } },
-  build: { outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 4000 },
+  // Fonts stay files: the page CSP (default-src 'self') blocks data: fonts.
+  build: { outDir: "dist", emptyOutDir: true, chunkSizeWarningLimit: 4000, assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined) },
 });
