@@ -49,6 +49,13 @@ export class CanvizWidget extends WidgetType {
   toDOM(view: EditorView) {
     const wrap = document.createElement("div");
     wrap.className = "rn-canviz";
+    // Clicks on the player must not move the editor cursor onto this line, or the block
+    // flips back to source and the player is torn down mid-play. Inputs (the scrubber) still
+    // need their default mousedown to drag.
+    wrap.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+    });
     const edit = document.createElement("button");
     edit.className = "rn-canviz-edit";
     edit.textContent = "Edit source";
