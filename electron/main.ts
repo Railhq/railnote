@@ -76,6 +76,7 @@ function registerIpc() {
   ipcMain.handle("vault:rename", (_e, a: string, b: string) => need().rename(a, b));
   ipcMain.handle("vault:remove", (_e, p: string) => need().remove(p));
   ipcMain.handle("vault:readRaw", (_e, p: string) => need().readRaw(p));
+  ipcMain.handle("vault:findByName", (_e, name: string) => need().findByName(name));
   ipcMain.handle("ai:ask", (e, id: string, question: string, sources: AskSource[]) => {
     const send = (msg: object) => e.sender.send("ai:ask:event", { id, ...msg });
     // Resolve the invoke right away; the answer streams back as events.

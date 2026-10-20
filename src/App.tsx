@@ -133,6 +133,8 @@ export function App() {
           /* try the next location */
         }
       }
+      const found = src.includes("/") ? null : await host.findByName(src);
+      if (found) return host.readRaw(found);
       throw new Error(`Couldn't find ${src} in this vault`);
     });
     const offIndex = ws.index.subscribe(() => {

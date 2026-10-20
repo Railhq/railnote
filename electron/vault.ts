@@ -42,6 +42,24 @@ export class Vault {
     return { path: rel, content, mtime: stat.mtimeMs };
   }
 
+  /** Vault path of the first file named `name` (case-insensitive), the way Obsidian resolves ![[embeds]]. */
+  async findByName(name: string): Promise<string | null> {
+    const want = name.toLowerCase();
+    const walk = async (dir: string): Promise<string | null> => {
+      for (const ent of await fs.readdir(dir, { withFileTypes: true })) {
+        const abs = path.join(dir, ent.name);
+        const rel = toPosix(path.relative(this.root, abs));
+        if (IGNORED.test(rel) || ent.name.startsWith(".")) continue;
+        if (ent.isDirectory()) {
+          const hit = await walk(abs);
+          if (hit) return hit;
+        } else if (ent.name.toLowerCase() === want) return rel;
+      }
+      return null;
+    };
+    return walk(this.root);
+  }
+
   readRaw(rel: string) {
     return fs.readFile(this.resolve(rel), "utf8");
   }

@@ -52,6 +52,8 @@ export interface HostApi {
   rename(from: string, to: string): Promise<void>;
   remove(path: string): Promise<void>;
   readRaw(path: string): Promise<string>;
+  /** Vault path of the first file with this name anywhere in the vault, for ![[embeds]]. */
+  findByName(name: string): Promise<string | null>;
   onVaultEvent(cb: (e: VaultEvent) => void): () => void;
   ask(id: string, question: string, sources: AskSource[]): Promise<void>;
   onAskEvent(cb: (e: { id: string; delta?: string; done?: boolean; error?: string }) => void): () => void;

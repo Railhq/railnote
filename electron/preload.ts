@@ -17,6 +17,7 @@ const api: HostApi = {
   rename: (a, b) => ipcRenderer.invoke("vault:rename", a, b),
   remove: (p) => ipcRenderer.invoke("vault:remove", p),
   readRaw: (p) => ipcRenderer.invoke("vault:readRaw", p),
+  findByName: (name) => ipcRenderer.invoke("vault:findByName", name),
   onVaultEvent: (cb) => listen("vault:event", cb),
   ask: (id, q, s) => ipcRenderer.invoke("ai:ask", id, q, s),
   onAskEvent: (cb) => listen("ai:ask:event", cb),
