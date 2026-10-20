@@ -3,7 +3,8 @@ import type { EditorView } from "@codemirror/view";
 import type { NoteFile, Settings } from "../shared/types";
 import { Editor } from "./editor/Editor";
 import { setLinkResolver } from "./editor/live-preview";
-import { setCanvizFileOpener, setCanvizSourceReader } from "./editor/canviz-widget";
+import { plugins } from "./plugins/host";
+import { PluginEntry, syncPlugins } from "./plugins/loader";
 import { noteFolder } from "./lib/vault-index";
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
@@ -31,6 +32,9 @@ export function App() {
   const [booting, setBooting] = useState(true);
   const [searchKey, setSearchKey] = useState(0);
   const [sourcePath, setSourcePath] = useState<string | null>(null);
+  const [pluginList, setPluginList] = useState<PluginEntry[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const insertRef = useRef<(text: string, cursor?: number) => void>(() => {});
 
   // What the editor and the file agree on; anything else in the index for this path came from elsewhere.
   const synced = useRef("");
@@ -143,16 +147,20 @@ export function App() {
       if (found) return found;
       throw new Error(`Couldn't find ${src} in this vault`);
     };
-    setCanvizSourceReader(async (src) => host.readRaw(await resolveSource(src)));
-    setCanvizFileOpener(async (src) => {
-      try {
-        const p = await resolveSource(src);
+    plugins.setBridge({
+      resolve: resolveSource,
+      read: (p) => host.readRaw(p),
+      write: (p, c) => host.write(p, c),
+      notes: () => ws.index.all().map((n) => n.path),
+      activeNote: () => currentRef.current,
+      open: (p) => open(p),
+      openFile: async (p) => {
         await flushRef.current();
         setSourcePath(p);
         setView("source");
-      } catch (e) {
-        alert((e as Error).message);
-      }
+      },
+      insertText: (t, c) => insertRef.current(t, c),
+      notice: (m) => setNotice(m),
     });
     const offIndex = ws.index.subscribe(() => {
       setTick((t) => t + 1);
@@ -178,6 +186,25 @@ export function App() {
       offVault();
     };
   }, [ws]);
+
+  // Plugins follow the open vault: its own plugins come and go with it.
+  useEffect(() => {
+    if (!ws) return;
+    let live = true;
+    host
+      .listVaultPlugins()
+      .then((found) => syncPlugins(ws.settings, found))
+      .then((list) => live && setPluginList(list));
+    return () => {
+      live = false;
+    };
+  }, [ws]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   const onChange = (content: string) => {
     draft.current = content;
@@ -224,13 +251,14 @@ export function App() {
     await flush();
     setOverlay({ organize: p });
   };
-  const insertText = (text: string) => {
+  const insertText = (text: string, cursor = text.length) => {
     const v = editorView.current;
     if (!v) return;
     const { from, to } = v.state.selection.main;
-    v.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+    v.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + cursor } });
     v.focus();
   };
+  insertRef.current = insertText;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -278,6 +306,7 @@ export function App() {
     ...(current ? [{ id: "org", label: "Organize this note with Claude", hint: "⇧⌘O", run: () => organize(current) }] : []),
     { id: "tpl", label: "Insert template…", hint: "⌘T", run: () => setOverlay("templates") },
     { id: "settings", label: "Settings", hint: "⌘,", run: () => setOverlay("settings") },
+    ...plugins.commands,
   ];
 
   return (
@@ -374,13 +403,20 @@ export function App() {
           onClose={() => setOverlay(null)}
         />
       )}
+      {notice && <div className="notice" role="status">{notice}</div>}
       {overlay === "settings" && (
         <SettingsDialog
           settings={settings}
+          plugins={pluginList}
           onClose={() => setOverlay(null)}
           onSaved={(s) => {
             setSettings(s);
             ws.settings = s;
+          }}
+          onPluginsChanged={async (s) => {
+            setSettings(s);
+            ws.settings = s;
+            setPluginList(await syncPlugins(s, await host.listVaultPlugins()));
           }}
           onSwitchVault={async () => {
             const dir = await host.chooseVault();

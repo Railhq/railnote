@@ -10,6 +10,7 @@ import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view
 import { tags as t } from "@lezer/highlight";
 import { blockPreview, inlinePreview, refreshPreview } from "./live-preview";
 import type { VaultIndex } from "../lib/vault-index";
+import { plugins } from "../plugins/host";
 
 const highlight = HighlightStyle.define([
   { tag: t.heading1, fontWeight: "700" },
@@ -127,6 +128,9 @@ export function Editor(props: EditorProps) {
   useEffect(() => {
     view.current?.dispatch({ effects: refreshPreview.of(null) });
   }, [props.index.version]);
+
+  // A plugin turned on or off changes which blocks it draws.
+  useEffect(() => plugins.subscribe(() => view.current?.dispatch({ effects: refreshPreview.of(null) })), []);
 
   return <div className="editor" ref={host} />;
 }

@@ -1,0 +1,7 @@
+{
+  "id": "progress",
+  "name": "Progress bars",
+  "version": "1.0.0",
+  "description": "Draws ```progress blocks: one `label: done/total` per line.",
+  "author": "Railnote"
+}

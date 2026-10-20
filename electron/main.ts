@@ -1,11 +1,17 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
+import { pathToFileURL } from "url";
 import fs from "fs/promises";
 import path from "path";
-import type { OrganizeRequest, Settings, AskSource } from "../shared/types";
+import type { OrganizeRequest, PluginManifest, Settings, AskSource } from "../shared/types";
 import { Vault, createStarterVault } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
+
+// Vault plugins load as ES modules from railnote-plugin://<id>/<file>, served out of the open vault.
+const PLUGIN_SCHEME = "railnote-plugin";
+protocol.registerSchemesAsPrivileged([{ scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
+const PLUGIN_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 const DEFAULTS: Settings = {
   recentVaults: [],
@@ -52,7 +58,60 @@ function need(): Vault {
   return vault;
 }
 
+const pluginsDir = () => path.join(need().root, ".railnote", "plugins");
+
+async function listVaultPlugins(): Promise<PluginManifest[]> {
+  if (!vault) return [];
+  let dirs: string[];
+  try {
+    dirs = (await fs.readdir(pluginsDir(), { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch {
+    return [];
+  }
+  const out: PluginManifest[] = [];
+  for (const dir of dirs.sort()) {
+    const base: PluginManifest = { id: dir, name: dir, version: "" };
+    try {
+      const m = JSON.parse(await fs.readFile(path.join(pluginsDir(), dir, "manifest.json"), "utf8"));
+      if (m.id !== dir) throw new Error(`manifest id "${m.id}" must match its folder name "${dir}"`);
+      if (!PLUGIN_ID.test(dir)) throw new Error("id may only use lowercase letters, digits and dashes");
+      const main = typeof m.main === "string" ? m.main : "main.js";
+      const stat = await fs.stat(path.join(pluginsDir(), dir, main));
+      out.push({
+        id: dir,
+        name: String(m.name || dir),
+        version: String(m.version || ""),
+        description: m.description ? String(m.description) : undefined,
+        author: m.author ? String(m.author) : undefined,
+        main,
+        // The mtime busts the module cache so a reload picks up edits.
+        url: `${PLUGIN_SCHEME}://${dir}/${main.split("/").map(encodeURIComponent).join("/")}?v=${stat.mtimeMs}`,
+      });
+    } catch (e) {
+      out.push({ ...base, error: (e as Error).message });
+    }
+  }
+  return out;
+}
+
+/** Only files inside a plugin's own folder, and only for vaults the user trusts. */
+function servePlugins() {
+  protocol.handle(PLUGIN_SCHEME, async (req) => {
+    const url = new URL(req.url);
+    const id = url.hostname;
+    if (!vault || !PLUGIN_ID.test(id) || !settings.trustedVaults?.includes(vault.root)) return new Response("Not allowed", { status: 403 });
+    const dir = path.join(pluginsDir(), id);
+    const file = path.resolve(dir, "." + decodeURIComponent(url.pathname));
+    if (!file.startsWith(dir + path.sep)) return new Response("Not allowed", { status: 403 });
+    const res = await net.fetch(pathToFileURL(file).toString()).catch(() => new Response("Not found", { status: 404 }));
+    if (!res.ok || !/\.m?js$/.test(file)) return res;
+    // The app page is file://, a different origin, so module loads need CORS.
+    return new Response(res.body, { headers: { "content-type": "text/javascript", "access-control-allow-origin": "*" } });
+  });
+}
+
 function registerIpc() {
+  ipcMain.handle("plugins:list", () => listVaultPlugins());
   ipcMain.handle("settings:get", () => publicSettings());
   ipcMain.handle("settings:set", async (_e, patch: Partial<Settings>) => {
     const { anthropicApiKey, ...rest } = patch;
@@ -124,6 +183,7 @@ app.whenReady().then(async () => {
   await loadSettings();
   if (process.env.RAILNOTE_VAULT) settings.vaultPath = path.resolve(process.env.RAILNOTE_VAULT);
   registerIpc();
+  servePlugins();
   createWindow();
   app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });

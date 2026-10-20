@@ -16,10 +16,10 @@ export default defineConfig({
   define: { "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "production") },
   resolve: {
     alias: {
-      "@canviz-engine": path.resolve(hasEngine ? "src/canviz/engine.ts" : "src/canviz/engine-missing.ts"),
+      "@canviz-engine": path.resolve(hasEngine ? "src/plugins/canviz/engine.ts" : "src/plugins/canviz/engine-missing.ts"),
       "@engine": ENGINE,
       "@canviz-hands": path.join(APP, "public/hands"),
-      "lottie-web": path.resolve("src/canviz/stubs/lottie-web.ts"),
+      "lottie-web": path.resolve("src/plugins/canviz/stubs/lottie-web.ts"),
     },
   },
   server: { port: 5199, strictPort: true, fs: { allow: [".", APP] } },

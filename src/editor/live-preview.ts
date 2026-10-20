@@ -2,7 +2,8 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorState, Range, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
 import { LINK_RE, parseFrontmatter } from "../lib/parse";
-import { CanvizWidget } from "./canviz-widget";
+import { plugins } from "../plugins/host";
+import { PluginWidget } from "./plugin-widget";
 
 // "Live preview lite": Markdown syntax hides on every line except the ones the cursor is on,
 // so notes read like a document while staying plain text underneath.
@@ -155,7 +156,7 @@ function buildInline(view: EditorView): DecorationSet {
         const start = line.from + m.index!;
         const end = start + m[0].length;
         const target = m[2].trim();
-        if (!target || /\.canviz$/i.test(target)) continue;
+        if (!target || plugins.embeds.has(extOf(target))) continue;
         const cls = `cm-rn-wikilink${resolveHook(target) ? "" : " cm-rn-unresolved"}`;
         const attrs = { "data-link": target + (m[3] ?? "") };
         if (active.has(line.number)) {
@@ -204,28 +205,35 @@ export const inlinePreview = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-/** Explainer blocks (```canviz fences and ![[x.canviz]] embeds) become players unless the cursor is inside. */
+const extOf = (name: string) => /\.([\w-]+)$/.exec(name)?.[1].toLowerCase() ?? "";
+
+/** ```lang fences and ![[file.ext]] embeds that a plugin claimed are drawn by it, unless the cursor is inside. */
 function buildBlocks(state: EditorState): DecorationSet {
   const active = activeLines(state);
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
   for (let i = 1; i <= doc.lines; i++) {
     const line = doc.line(i);
-    if (/^```canviz\s*$/.test(line.text)) {
+    const fence = /^```\s*([\w-]+)\s*$/.exec(line.text);
+    if (fence) {
       let j = i + 1;
       while (j <= doc.lines && !/^```\s*$/.test(doc.line(j).text)) j++;
       if (j > doc.lines) break;
-      const end = doc.line(j);
-      let touched = false;
-      for (let k = i; k <= j; k++) if (active.has(k)) touched = true;
-      const source = doc.sliceString(doc.line(i).to + 1, end.from).trim();
-      if (!touched) builder.add(line.from, end.to, Decoration.replace({ widget: new CanvizWidget(source), block: true }));
+      const lang = fence[1].toLowerCase();
+      if (plugins.blocks.has(lang)) {
+        const end = doc.line(j);
+        let touched = false;
+        for (let k = i; k <= j; k++) if (active.has(k)) touched = true;
+        const source = doc.sliceString(line.to + 1, end.from).trim();
+        if (!touched) builder.add(line.from, end.to, Decoration.replace({ widget: new PluginWidget("block", lang, source, plugins.version), block: true }));
+      }
       i = j;
       continue;
     }
-    const embed = /^\s*!\[\[([^\]|]+\.canviz)(?:\|[^\]]*)?\]\]\s*$/i.exec(line.text);
-    if (embed && !active.has(i)) {
-      builder.add(line.from, line.to, Decoration.replace({ widget: new CanvizWidget(`src: ${embed[1]}`), block: true }));
+    const embed = /^\s*!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\s*$/.exec(line.text);
+    const ext = embed ? extOf(embed[1].trim()) : "";
+    if (embed && plugins.embeds.has(ext) && !active.has(i)) {
+      builder.add(line.from, line.to, Decoration.replace({ widget: new PluginWidget("embed", ext, embed[1].trim(), plugins.version), block: true }));
     }
   }
   return builder.finish();
@@ -234,7 +242,7 @@ function buildBlocks(state: EditorState): DecorationSet {
 export const blockPreview = StateField.define<DecorationSet>({
   create: buildBlocks,
   update(deco, tr) {
-    return tr.docChanged || tr.selection ? buildBlocks(tr.state) : deco;
+    return tr.docChanged || tr.selection || tr.effects.some((e) => e.is(refreshPreview)) ? buildBlocks(tr.state) : deco;
   },
   provide: (f) => EditorView.decorations.from(f),
 });

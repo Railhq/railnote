@@ -181,13 +181,13 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .cm-rn-fm * { font-weight: normal !important; color: inherit !important; font-size: inherit !important; font-style: normal !important; text-decoration: none !important; }
 
 /* Explainer player: framed like a plate in a book. */
-.rn-canviz { position: relative; margin: 14px 0; }
-.rn-canviz-edit {
+.rn-block { position: relative; margin: 14px 0; }
+.rn-block-edit {
   position: absolute; top: 8px; right: 8px; z-index: 2; opacity: 0; transition: opacity 0.15s; font-size: 11px; padding: 2px 9px;
   font-family: var(--sans);
 }
-.rn-canviz:hover .rn-canviz-edit, .rn-canviz-edit:focus-visible { opacity: 1; }
-.rn-canviz-error { color: var(--danger); font-family: var(--sans); font-size: 13px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
+.rn-block:hover .rn-block-edit, .rn-block-edit:focus-visible { opacity: 1; }
+.rn-block-error { color: var(--danger); font-family: var(--sans); font-size: 13px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
 .canviz-player { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
 .canviz-stage { width: 100%; cursor: pointer; }
 .canviz-stage canvas { display: block; width: 100%; height: 100%; }
@@ -301,3 +301,18 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .source-editor .cm-cursor { border-left-color: var(--signal); border-left-width: 2px; }
 .source-editor .cm-selectionBackground, .source-editor .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--signal) 28%, transparent) !important; }
 .source-editor .cm-matchingBracket { background: color-mix(in srgb, var(--signal) 22%, transparent); outline: none; }
+
+/* ---------- plugins ---------- */
+.plugin-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 13px; cursor: pointer; }
+.plugin-row input { accent-color: var(--signal); margin-top: 3px; }
+.plugin-row:has(input:disabled) { cursor: default; }
+.plugin-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.plugin-name { color: var(--ink); font-weight: 600; }
+.plugin-error { color: var(--danger); }
+.plugin-vault { margin-top: 8px; padding-left: 12px; border-left: 2px solid var(--line); }
+.plugin-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.notice {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; max-width: min(520px, 90vw);
+  padding: 9px 14px; border-radius: 8px; background: var(--rail); color: var(--rail-ink); font-size: 13px;
+  box-shadow: inset 3px 0 0 var(--signal);
+}

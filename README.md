@@ -14,7 +14,33 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 | Tasks scattered across notes | The **Tasks** view collects every `- [ ]` in the vault. Ticking one edits the file. |
 | Lock-in, agents, open source | Plain Markdown, Obsidian syntax (wikilinks, aliases, embeds, frontmatter, `#tags`), `.obsidian/` ignored, edits made by other apps or agents appear live, MIT licensed. Renames rewrite links across the vault. Deletes go to `.trash/`. |
 
-Explainers: a ```` ```canviz ```` block or `![[file.canviz]]` embed plays an animated openCanviz explainer inline (needs the openCanviz engine checkout at build time; without it the block shows a notice).
+## Plugins
+
+A plugin claims a code-block language or a file type, and Railnote hands it an element to draw into. It can also add commands to the ⌘P palette and read and write vault files. The whole API is in [`src/plugins/api.ts`](src/plugins/api.ts).
+
+**Explainers** is the built-in plugin: a ```` ```canviz ```` block or `![[file.canviz]]` embed plays an animated openCanviz explainer inline, and "Edit source" opens the `.canviz` file (needs the openCanviz engine checkout at build time; without it the block shows a notice). It can be switched off in Settings.
+
+Your own plugins live in the vault, one folder each:
+
+```
+<vault>/.railnote/plugins/progress/
+  manifest.json   {"id": "progress", "name": "Progress bars", "version": "1.0.0"}
+  main.js         export default { activate(railnote) { ... } }
+```
+
+```js
+export default {
+  activate(railnote) {
+    railnote.registerBlock("progress", (source, el) => { el.textContent = source; });
+    railnote.registerEmbed(["csv"], async (file, el) => { el.textContent = await railnote.vault.read(file); });
+    railnote.addCommand({ id: "hello", label: "Say hello", run: () => railnote.notice("Hello") });
+  },
+};
+```
+
+A renderer may return a cleanup function, which runs when the block leaves the screen or the plugin is switched off. If a plugin throws, its error shows in Settings and the rest of the app carries on.
+
+Vault plugins are off until you allow them: Settings, Plugins, **Allow plugins in this vault**, then switch each one on. They run with the same access as Railnote, so only allow code you wrote or trust. A working example is in [`examples/plugins/progress`](examples/plugins/progress).
 
 ## Keys
 
