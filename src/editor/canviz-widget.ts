@@ -2,12 +2,15 @@ import { EditorView, WidgetType } from "@codemirror/view";
 import { available } from "@canviz-engine";
 import { CanvizPlayer, DiagramData, PlayerOptions } from "../canviz/player";
 
-/** Set by the app: reads an explainer's JSON given the `src:` written in the note. */
-let readSource: (src: string) => Promise<string> = async () => {
-  throw new Error("no vault open");
-};
+/** Set by the app: reads an explainer's JSON given the `src:` written in the note.
+ *  The editor can mount (and start loading explainers) before the app installs the reader,
+ *  so early reads wait for it instead of failing. */
+let installReader!: (fn: (src: string) => Promise<string>) => void;
+let readerReady = new Promise<(src: string) => Promise<string>>((r) => (installReader = r));
+const readSource = async (src: string) => (await readerReady)(src);
 export function setCanvizSourceReader(fn: (src: string) => Promise<string>) {
-  readSource = fn;
+  installReader(fn);
+  readerReady = Promise.resolve(fn);
 }
 
 // ```canviz
