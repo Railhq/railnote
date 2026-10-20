@@ -3,7 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import type { NoteFile, Settings } from "../shared/types";
 import { Editor } from "./editor/Editor";
 import { setLinkResolver } from "./editor/live-preview";
-import { setCanvizSourceReader } from "./editor/canviz-widget";
+import { setCanvizFileOpener, setCanvizSourceReader } from "./editor/canviz-widget";
 import { noteFolder } from "./lib/vault-index";
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
@@ -11,6 +11,7 @@ import { MainView, Sidebar } from "./components/Sidebar";
 import { RightPanel } from "./components/RightPanel";
 import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
+import { SourceView } from "./components/SourceView";
 
 type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string };
 
@@ -29,6 +30,7 @@ export function App() {
   const [reloadKey, setReloadKey] = useState(0);
   const [booting, setBooting] = useState(true);
   const [searchKey, setSearchKey] = useState(0);
+  const [sourcePath, setSourcePath] = useState<string | null>(null);
 
   // What the editor and the file agree on; anything else in the index for this path came from elsewhere.
   const synced = useRef("");
@@ -72,6 +74,8 @@ export function App() {
     synced.current = draft.current;
     await ws.write(p, draft.current);
   }, [ws, conflict]);
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
   function loadNote(w: Workspace, path: string | null, line?: number) {
     const content = path ? w.index.notes.get(path)?.content ?? "" : "";
@@ -123,19 +127,32 @@ export function App() {
   useEffect(() => {
     if (!ws) return;
     setLinkResolver((t) => !!ws.index.resolve(t.split("#")[0]));
-    setCanvizSourceReader(async (src) => {
+    // An explainer's src: is tried as written, next to the note, as a note link, then by file name anywhere.
+    const resolveSource = async (src: string) => {
       const folder = noteFolder(currentRef.current ?? "");
       const tries = [src, folder ? `${folder}/${src}` : src, ws.index.resolve(src)].filter((x): x is string => !!x);
       for (const p of [...new Set(tries)]) {
         try {
-          return await host.readRaw(p);
+          await host.readRaw(p);
+          return p;
         } catch {
           /* try the next location */
         }
       }
       const found = src.includes("/") ? null : await host.findByName(src);
-      if (found) return host.readRaw(found);
+      if (found) return found;
       throw new Error(`Couldn't find ${src} in this vault`);
+    };
+    setCanvizSourceReader(async (src) => host.readRaw(await resolveSource(src)));
+    setCanvizFileOpener(async (src) => {
+      try {
+        const p = await resolveSource(src);
+        await flushRef.current();
+        setSourcePath(p);
+        setView("source");
+      } catch (e) {
+        alert((e as Error).message);
+      }
     });
     const offIndex = ws.index.subscribe(() => {
       setTick((t) => t + 1);
@@ -328,6 +345,9 @@ export function App() {
               }}
             />
           </>
+        )}
+        {view === "source" && sourcePath && (
+          <SourceView key={sourcePath} path={sourcePath} backLabel={note?.name ?? "note"} onBack={() => loadNote(ws, currentRef.current)} />
         )}
         {view === "note" && !note && (
           <div className="empty-main">

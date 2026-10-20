@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Note } from "../lib/vault-index";
 import type { Workspace } from "../workspace";
 
-export type MainView = "note" | "tasks" | "inbox";
+export type MainView = "note" | "tasks" | "inbox" | "source";
 
 interface Props {
   ws: Workspace;

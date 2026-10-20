@@ -13,6 +13,18 @@ export function setCanvizSourceReader(fn: (src: string) => Promise<string>) {
   readerReady = Promise.resolve(fn);
 }
 
+/** Set by the app: opens the file behind a `src:` explainer for editing. */
+let openSourceFile: ((src: string) => void) | null = null;
+export function setCanvizFileOpener(fn: (src: string) => void) {
+  openSourceFile = fn;
+}
+
+/** The file an explainer block points at, or null when its JSON is written inline. */
+function sourceFile(source: string): string | null {
+  const m = /^\s*src:\s*(.+?)\s*$/m.exec(source.trim().startsWith("{") ? "" : source);
+  return m ? m[1].replace(/^\[\[|\]\]$/g, "") : null;
+}
+
 // ```canviz
 // src: explainers/cdn.canviz
 // autoplay: true
@@ -62,7 +74,11 @@ export class CanvizWidget extends WidgetType {
     const edit = document.createElement("button");
     edit.className = "rn-canviz-edit";
     edit.textContent = "Edit source";
+    const file = sourceFile(this.source);
+    if (file) edit.title = `Open ${file}`;
     edit.onclick = () => {
+      // The JSON lives in its own file, so edit that rather than the one-line embed.
+      if (file && openSourceFile) return openSourceFile(file);
       const pos = view.posAtDOM(wrap);
       view.dispatch({ selection: { anchor: pos } });
       view.focus();

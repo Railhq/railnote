@@ -287,3 +287,17 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Code view for an explainer's JSON file */
+.source-title { font-family: var(--mono); font-size: 22px; font-weight: 500; padding-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-title:hover { border-bottom-color: transparent; }
+.source-status { max-width: 708px; width: 100%; margin: 0 auto 10px; padding: 0 56px; box-sizing: border-box; color: var(--muted); font-size: 13px; }
+.source-status.bad { color: var(--link); }
+.source-editor { flex: 1; min-height: 0; overflow: hidden; border-top: 1px solid var(--line); }
+.source-editor .cm-editor { height: 100%; outline: none; background: var(--paper); color: var(--ink); }
+.source-editor .cm-scroller { font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+.source-editor .cm-gutters { background: var(--paper-2); color: var(--muted); border-right: 1px solid var(--line); }
+.source-editor .cm-activeLineGutter { background: transparent; color: var(--ink); }
+.source-editor .cm-cursor { border-left-color: var(--signal); border-left-width: 2px; }
+.source-editor .cm-selectionBackground, .source-editor .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--signal) 28%, transparent) !important; }
+.source-editor .cm-matchingBracket { background: color-mix(in srgb, var(--signal) 22%, transparent); outline: none; }
