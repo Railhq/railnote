@@ -19,6 +19,7 @@
   --line-2: #93aed6;
   --line-3: #d39b9b;
   --line-4: #c8b47a;
+  --graph-edge: #c3c9c1;
   --serif: "Literata Variable", "Iowan Old Style", Georgia, serif;
   --sans: "Hanken Grotesk Variable", -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -37,6 +38,7 @@
     --muted: #8c9692;
     --link: #f2b13c;
     --danger: #f08a80;
+    --graph-edge: #3b4743;
     color-scheme: dark;
   }
 }
@@ -424,3 +426,22 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .menu button:hover { background: var(--rail); color: var(--rail-ink); }
 .menu button.danger { color: var(--danger); }
 .menu button.danger:hover { background: var(--danger); color: #fff; }
+
+/* graph view */
+.graph-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.graph-bar { height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 20px; border-bottom: 1px solid var(--line); -webkit-app-region: drag; }
+.graph-bar > * { -webkit-app-region: no-drag; }
+.graph-bar .seg button { text-transform: none; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.graph-opt { display: flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: 13px; }
+.graph-opt select { font: inherit; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; color: inherit; }
+.graph-opt input { accent-color: var(--signal); margin: 0; }
+.graph-count { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.graph-zoom { display: flex; gap: 2px; }
+.graph-zoom button { padding: 3px 9px; }
+.graph-stage { position: relative; flex: 1; min-height: 0; }
+.graph-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.graph-stage canvas:active { cursor: grabbing; }
+.graph-empty { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); max-width: 380px; text-align: center; color: var(--muted); font-family: var(--serif); font-size: 16px; line-height: 1.55; margin: 0; }
+.graph-legend { position: absolute; left: 20px; bottom: 16px; list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; max-width: calc(100% - 40px); background: color-mix(in srgb, var(--paper) 88%, transparent); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; color: var(--ink-2); pointer-events: none; }
+.graph-legend li { display: flex; align-items: center; gap: 6px; }
+.graph-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }

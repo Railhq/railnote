@@ -14,6 +14,7 @@ import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
 import { SourceView } from "./components/SourceView";
 import { NotePane, PaneHandle } from "./components/NotePane";
+import { GraphView } from "./components/GraphView";
 import { exportNote, type ExportKind } from "./export/export";
 
 type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string };
@@ -324,6 +325,7 @@ export function App() {
         const t = k === "9" ? tabs[tabs.length - 1] : tabs[Number(k) - 1];
         if (t) act[k] = () => void open(t);
       }
+      if (e.altKey && e.code === "KeyG") act[k] = () => setView((v) => (v === "graph" ? "note" : "graph"));
       if (e.altKey && (k === "arrowleft" || k === "arrowright")) act[k] = () => focusPane(k === "arrowleft" ? 0 : 1);
       if (!act[k]) return;
       e.preventDefault();
@@ -357,6 +359,7 @@ export function App() {
     { id: "search", label: "Search all notes", hint: "⇧⌘F", run: () => setSearchKey((n) => n + 1) },
     { id: "inbox", label: "Show inbox", run: () => setView("inbox") },
     { id: "tasks", label: "Show all tasks", run: () => setView("tasks") },
+    { id: "graph", label: "Show graph view", hint: "⌥⌘G", run: () => setView("graph") },
     { id: "ask", label: "Ask your notes", hint: "⌘J", run: () => setRightTab("ask") },
     ...(current ? [{ id: "org", label: "Organize this note with Claude", hint: "⇧⌘O", run: () => organize(current) }] : []),
     { id: "split", label: layout.panes.length > 1 ? "Close split view" : "Open this note to the side", hint: "⌘\\", run: () => void toggleSplit() },
@@ -389,6 +392,7 @@ export function App() {
       <main className="main">
         {view !== "note" && <div className="drag-region" />}
         {view === "tasks" && <TasksView ws={ws} onOpen={open} />}
+        {view === "graph" && <GraphView ws={ws} current={current} onOpen={(p, where) => void open(p, undefined, where)} />}
         {view === "inbox" && <InboxView ws={ws} onOpen={(p) => open(p)} onOrganize={organize} onNew={() => newNote()} />}
         {view === "note" && (
           <div className={`panes${split ? " split" : ""}`}>

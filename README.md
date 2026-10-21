@@ -12,6 +12,8 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 | "Where does this note go?" | New notes land in `Inbox/`. **Organize** asks Claude for a folder, tags and related notes; you tick what to apply. |
 | No built-in AI | **Ask** answers questions from your own notes and cites them as `[[links]]`. Search runs locally; only the best-matching passages are sent. |
 | Tasks scattered across notes | The **Tasks** view collects every `- [ ]` in the vault. Ticking one edits the file. |
+| Sharing a note means sharing the app | **Export to HTML** makes one self-contained page with pictures, fonts, diagrams and playing explainers inside it. **Export to PDF** prints the same page, explainers shown at their last frame. |
+| The graph is a hairball | **Graph** colours each note by its top-level folder, shows names when you zoom in or hover, and can narrow to the notes 1 to 3 links from the one you're on. Click a note to open it. |
 | Lock-in, agents, open source | Plain Markdown, Obsidian syntax (wikilinks, aliases, embeds, frontmatter, `#tags`), `.obsidian/` ignored, edits made by other apps or agents appear live, MIT licensed. Renames rewrite links across the vault. Deletes go to `.trash/`. |
 
 ## Plugins
@@ -54,6 +56,10 @@ Vault plugins are off until you allow them: Settings, Plugins, **Allow plugins i
 | ⇧⌘F | Search all notes |
 | ⇧⌘O | Organize this note |
 | ⌘J | Ask your notes |
+| ⌘\\ | Split the view in two |
+| ⌘1…9, Ctrl+Tab | Pick or step through tabs |
+| ⌥⌘G | Graph view |
+| ⌥⌘P | Export to PDF |
 | ⌘, | Settings |
 
 ## Claude

@@ -3,7 +3,7 @@ import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
 
-export type MainView = "note" | "tasks" | "inbox" | "source";
+export type MainView = "note" | "tasks" | "inbox" | "source" | "graph";
 
 export type EntryKind = "note" | "file" | "folder";
 interface Entry {
@@ -250,6 +250,9 @@ export function Sidebar(p: Props) {
         </button>
         <button className={p.view === "tasks" ? "on" : ""} onClick={() => p.onView("tasks")}>
           Tasks {openTasks > 0 && <span className="count">{openTasks}</span>}
+        </button>
+        <button className={p.view === "graph" ? "on" : ""} onClick={() => p.onView("graph")} title="How your notes link up (⌥⌘G)">
+          Graph
         </button>
       </div>
       <div className="tabs">
