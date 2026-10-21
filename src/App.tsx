@@ -5,6 +5,7 @@ import type { OpenWhere } from "./editor/hooks";
 import { plugins } from "./plugins/host";
 import { PluginEntry, syncPlugins } from "./plugins/loader";
 import { extOf, noteFolder } from "./lib/vault-index";
+import { folderLines, lineColour } from "./lib/lines";
 import { closeTab, cycle, emptyLayout, Layout, moveTab, place, retarget, unsplit } from "./lib/layout";
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
@@ -342,6 +343,7 @@ export function App() {
   if (!ws || !settings) return <Welcome settings={settings ?? { recentVaults: [], model: "", dailyFolder: "", inboxFolder: "", templatesFolder: "" }} onOpened={(_d, files) => openVault(files)} />;
 
   const note = current ? ws.index.notes.get(current) : undefined;
+  const lines = folderLines(ws.index);
 
   const switcherItems = (q: string): PaletteItem[] => {
     const hits = ws.index.quickFind(q, 30).map((n) => ({ id: n.path, label: n.name, hint: n.folder, run: () => open(n.path) }));
@@ -403,13 +405,14 @@ export function App() {
               const shown = pn.active && ws.index.notes.has(pn.active) ? pn.active : null;
               return (
                 <section key={i} className={`pane${split && i === layout.focus ? " focused" : ""}${dropPane === i ? " drop" : ""}`} onDragOver={(e) => acceptTab(e, i)} onDragLeave={() => setDropPane(null)} onDrop={(e) => dropTab(e, i)}>
-                  <div className="tabbar" role="tablist">
-                    {pn.tabs.map((t) => (
+                  <div className="tabbar route" role="tablist" aria-label="Route">
+                    {pn.tabs.map((t, k) => (
                       <div
                         key={t}
                         role="tab"
                         aria-selected={t === pn.active}
-                        className={`tab${t === pn.active ? " active" : ""}`}
+                        className={`tab stop${t === pn.active ? " active" : ""}`}
+                        style={{ "--track": k ? lineColour(lines, t) : "transparent", "--next": k < pn.tabs.length - 1 ? lineColour(lines, pn.tabs[k + 1]) : "transparent" } as React.CSSProperties}
                         title={t}
                         draggable
                         onDragStart={(e) => {
@@ -427,6 +430,7 @@ export function App() {
                         }}
                         onAuxClick={(e) => e.button === 1 && void close(i, t)}
                       >
+                        <span className="stop-dot" aria-hidden="true" />
                         <span className="tab-name">{ws.index.notes.get(t)?.name ?? t.replace(/^.*\//, "").replace(/\.md$/, "")}</span>
                         <button
                           className="tab-x"

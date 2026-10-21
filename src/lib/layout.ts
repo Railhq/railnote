@@ -1,4 +1,4 @@
-// Open notes: up to two panes side by side, each a row of tabs with one showing.
+// Open notes: up to two panes side by side, each a route of stops (the notes you've travelled through) with one showing.
 
 import type { OpenWhere } from "../editor/hooks";
 
@@ -9,15 +9,29 @@ export interface Pane {
 
 export interface Layout {
   panes: Pane[];
-  /** Index of the pane in use: the one commands, the sidebar and the right panel follow. */
+  /** Index of the pane in use: the one commands and the sidebar follow. */
   focus: number;
 }
+
+/** A route longer than this sheds the stops furthest from where you are. */
+export const ROUTE_STOPS = 7;
 
 export const emptyLayout = (): Layout => ({ panes: [{ tabs: [], active: null }], focus: 0 });
 
 const copy = (l: Layout): Pane[] => l.panes.map((p) => ({ tabs: [...p.tabs], active: p.active }));
 
-/** Shows `path`: in place of the current tab, in a new tab after it, or in the other pane. */
+/** Drops the stops furthest from the one showing until the route fits, the earliest first on a tie. */
+function trim(p: Pane) {
+  while (p.tabs.length > ROUTE_STOPS) {
+    const here = p.active ? p.tabs.indexOf(p.active) : 0;
+    p.tabs.splice(here >= p.tabs.length - 1 - here ? 0 : p.tabs.length - 1, 1);
+  }
+}
+
+/**
+ * Shows `path` as the next stop after the current one ("here"), adds it as the next stop without
+ * leaving ("tab"), or shows it in the other pane ("split"). A note already on the route isn't added twice.
+ */
 export function place(l: Layout, path: string, where: OpenWhere): Layout {
   const panes = copy(l);
   let focus = l.focus;
@@ -28,10 +42,10 @@ export function place(l: Layout, path: string, where: OpenWhere): Layout {
   const p = panes[focus];
   if (!p.tabs.includes(path)) {
     const i = p.active ? p.tabs.indexOf(p.active) : -1;
-    if (where === "here" && i >= 0) p.tabs[i] = path;
-    else p.tabs.splice(i + 1, 0, path);
+    p.tabs.splice(i + 1, 0, path);
   }
-  p.active = path;
+  if (where !== "tab" || !p.active) p.active = path;
+  trim(p);
   return { panes, focus };
 }
 
