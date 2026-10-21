@@ -288,7 +288,8 @@ function buildBlocks(state: EditorState): DecorationSet {
       if (lang && plugins.blocks.has(lang) && !touched(i, j)) {
         const end = doc.line(j);
         const source = doc.sliceString(line.to + 1, end.from).trim();
-        block(line.from, end.to, new PluginWidget("block", lang, source, plugins.version));
+        const file = plugins.blocks.get(lang)!.sourceFile?.(source);
+        block(line.from, end.to, new PluginWidget("block", lang, source, plugins.version, file ? hooks.resolveFile(file)?.version ?? -1 : 0));
       }
       i = j;
       continue;
@@ -319,7 +320,7 @@ function buildBlocks(state: EditorState): DecorationSet {
     if (embed) {
       const target = embed[1].trim();
       const ext = extOf(target);
-      if (plugins.embeds.has(ext)) block(line.from, line.to, new PluginWidget("embed", ext, target, plugins.version));
+      if (plugins.embeds.has(ext)) block(line.from, line.to, new PluginWidget("embed", ext, target, plugins.version, hooks.resolveFile(target)?.version ?? -1));
       else if (isMedia(ext)) {
         const hit = hooks.resolveFile(target);
         block(line.from, line.to, new MediaWidget(target, hit?.path ?? null, hit?.version ?? 0, embed[2]?.trim() ?? "", line.from));

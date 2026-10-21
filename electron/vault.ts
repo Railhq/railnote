@@ -1,9 +1,9 @@
-import fs from "fs/promises";
+import fs, { constants } from "fs/promises";
 import path from "path";
 import chokidar, { FSWatcher } from "chokidar";
 import type { NoteFile, VaultEvent, VaultListing } from "../shared/types";
 
-export const IGNORED = /(^|[\/\\])(\.(obsidian|git|trash|railnote)|node_modules)([\/\\]|$)/;
+export const IGNORED = /(^|[\/\\])(\.(obsidian|git|trash|railnote|claude)|node_modules)([\/\\]|$)/;
 
 const toPosix = (p: string) => p.split(path.sep).join("/");
 
@@ -210,6 +210,7 @@ Instructions for AI agents working in this vault.
 - Notes are Markdown. Link notes with \`[[Note name]]\`. Tags go in frontmatter \`tags: [a, b]\` or inline as #tag.
 - New captures go in \`Inbox/\`. Daily notes live in \`Daily/YYYY-MM-DD.md\`.
 - Tasks are \`- [ ] text\`. Mark done with \`- [x]\`.
+- Explainers (animated openCanviz diagrams) are JSON in \`*.canviz\` files or \`\`\`canviz\` blocks. Before editing one, read \`.claude/skills/railnote-explainers/SKILL.md\`, and check your edit with \`node .claude/skills/railnote-explainers/check.mjs <file>\`.
 - Don't touch \`.railnote/\` or \`.obsidian/\`.
 `,
   "Inbox/.keep": () => "",
@@ -232,6 +233,27 @@ Instructions for AI agents working in this vault.
 
 `,
 };
+
+/**
+ * Copies the agent skills the app ships (built into dist-electron/skills) into the vault's
+ * .claude/skills, where Claude Code finds them. Returns the vault paths written.
+ */
+export async function installAgentSkills(dir: string, from: string, overwrite: boolean): Promise<string[]> {
+  const written: string[] = [];
+  for (const skill of await fs.readdir(from)) {
+    for (const file of await fs.readdir(path.join(from, skill))) {
+      const rel = `.claude/skills/${skill}/${file}`;
+      await fs.mkdir(path.join(dir, path.dirname(rel)), { recursive: true });
+      try {
+        await fs.copyFile(path.join(from, skill, file), path.join(dir, rel), overwrite ? 0 : constants.COPYFILE_EXCL);
+        written.push(rel);
+      } catch (e: any) {
+        if (e.code !== "EEXIST") throw e;
+      }
+    }
+  }
+  return written;
+}
 
 export async function createStarterVault(dir: string) {
   for (const [rel, body] of Object.entries(STARTER_FILES)) {

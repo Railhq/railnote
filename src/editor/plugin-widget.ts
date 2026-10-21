@@ -15,12 +15,14 @@ export class PluginWidget extends WidgetType {
     /** The block's text, or the embed's file name. */
     readonly source: string,
     readonly version: number,
+    /** Counter of the file the widget draws from; it changes when an outside edit lands. */
+    readonly fileVersion = 0,
   ) {
     super();
   }
 
   eq(o: PluginWidget) {
-    return o.kind === this.kind && o.key === this.key && o.source === this.source && o.version === this.version;
+    return o.kind === this.kind && o.key === this.key && o.source === this.source && o.version === this.version && o.fileVersion === this.fileVersion;
   }
 
   get estimatedHeight() {

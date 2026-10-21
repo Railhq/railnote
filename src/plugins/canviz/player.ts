@@ -19,6 +19,24 @@ export interface PlayerOptions {
 
 interface Box { x: number; y: number; width: number; height: number }
 
+/**
+ * A multi-scene openCanviz project (`diagrams: [...]`, what opencanviz.com imports and exports)
+ * as one doc: each scene's steps resolve to full snapshots and play one after another, so a scene
+ * starts from its own first step. Scene transitions become cuts. A flat doc comes back unchanged.
+ */
+export function flattenProject(d: DiagramData & { diagrams?: DiagramData[]; title?: string }): DiagramData {
+  if (!Array.isArray(d.diagrams)) return d;
+  const scenes = d.diagrams.filter((s) => s && typeof s === "object");
+  return {
+    nodes: scenes[0]?.nodes ?? [],
+    edges: scenes[0]?.edges ?? [],
+    steps: scenes.flatMap((s) => (s.steps?.length ? normalizeStepsToFullSnapshots(s.steps) : [])),
+    paths: Object.assign({}, d.paths, ...scenes.map((s) => s.paths ?? {})),
+    artboard: d.artboard ?? scenes[0]?.artboard,
+    metadata: { title: d.title ?? d.metadata?.title },
+  };
+}
+
 // Artboard the doc declares, else the bounds of its base nodes with some padding.
 function resolveArtboard(d: DiagramData): Box {
   const a = d.artboard;
@@ -72,7 +90,8 @@ export class CanvizPlayer {
   /** Settles once icons are parsed and the frame on screen is final. */
   readonly ready: Promise<void>;
 
-  constructor(private root: HTMLElement, data: DiagramData, private opts: PlayerOptions = {}) {
+  constructor(private root: HTMLElement, doc: DiagramData, private opts: PlayerOptions = {}) {
+    const data = flattenProject(doc);
     this.nodes = data.nodes ?? [];
     this.edges = data.edges ?? [];
     this.paths = data.paths ?? {};
@@ -141,6 +160,11 @@ export class CanvizPlayer {
   }
 
   /** Jumps to `ms` (clamped to the explainer's length) and draws that frame. */
+  /** Where the playhead is, in ms. */
+  get time() {
+    return this.t;
+  }
+
   seek(ms: number) {
     this.t = Math.max(0, Math.min(ms, this.total));
     this.render();

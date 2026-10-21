@@ -17,6 +17,8 @@ interface Owned<T> {
   plugin: string;
   name: string;
   fn: T;
+  /** For blocks: the file the block's data lives in, if not in the block itself. */
+  sourceFile?: (source: string) => string | null;
 }
 
 /** Holds what each loaded plugin registered, so turning one off removes exactly its parts. */
@@ -57,8 +59,8 @@ class PluginHost {
     const host = this;
     const rn: Railnote = {
       id,
-      registerBlock(lang, render) {
-        host.blocks.set(lang.toLowerCase(), { plugin: id, name, fn: render });
+      registerBlock(lang, render, options) {
+        host.blocks.set(lang.toLowerCase(), { plugin: id, name, fn: render, sourceFile: options?.sourceFile });
       },
       registerEmbed(extensions, render) {
         for (const ext of extensions) host.embeds.set(ext.replace(/^\./, "").toLowerCase(), { plugin: id, name, fn: render });

@@ -96,6 +96,8 @@ export interface HostApi {
   /** Base64 of a file the export player build shipped (player.js, hand pictures), or null without one. */
   exportAsset(name: string): Promise<string | null>;
   saveExport(defaultName: string, kind: "html" | "pdf", html: string): Promise<boolean>;
+  /** Writes the agent skills that ship with the app into the vault's .claude/skills; returns the paths. */
+  installAgentSkills(): Promise<string[]>;
   /** Vault path of the first file with this name anywhere in the vault, for ![[embeds]]. */
   findByName(name: string): Promise<string | null>;
   /** Plugins installed in the open vault's .railnote/plugins folder. */

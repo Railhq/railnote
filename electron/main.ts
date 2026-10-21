@@ -6,7 +6,7 @@ import os from "os";
 import path from "path";
 import { Readable } from "stream";
 import type { OrganizeRequest, PluginManifest, Settings, AskSource } from "../shared/types";
-import { IGNORED, Vault, createStarterVault } from "./vault";
+import { IGNORED, Vault, createStarterVault, installAgentSkills } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
@@ -37,6 +37,7 @@ const DEFAULTS: Settings = {
 
 const settingsFile = () => path.join(app.getPath("userData"), "settings.json");
 let settings: Settings = { ...DEFAULTS };
+const SKILLS = path.join(__dirname, "skills");
 let vault: Vault | undefined;
 let win: BrowserWindow | undefined;
 
@@ -195,8 +196,11 @@ function registerIpc() {
     const target = dir || path.join(app.getPath("documents"), "Railnote");
     await fs.mkdir(target, { recursive: true });
     await createStarterVault(target);
+    await installAgentSkills(target, SKILLS, false);
     return open(target);
   });
+  // Updates a vault's copy of the agent skills to the ones this version of the app ships.
+  ipcMain.handle("vault:installSkills", () => installAgentSkills(need().root, SKILLS, true));
   ipcMain.handle("vault:write", (_e, p: string, c: string) => need().write(p, c));
   ipcMain.handle("vault:rename", (_e, a: string, b: string) => need().rename(a, b));
   ipcMain.handle("vault:remove", (_e, p: string) => need().remove(p));

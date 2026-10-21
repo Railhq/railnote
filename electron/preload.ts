@@ -27,6 +27,7 @@ const api: HostApi = {
   saveExport: (name, kind, html) => ipcRenderer.invoke("export:save", name, kind, html),
   listVaultPlugins: () => ipcRenderer.invoke("plugins:list"),
   findByName: (name) => ipcRenderer.invoke("vault:findByName", name),
+  installAgentSkills: () => ipcRenderer.invoke("vault:installSkills"),
   onVaultEvent: (cb) => listen("vault:event", cb),
   onMenuCommand: (cb) => listen("menu:command", cb),
   ask: (id, q, s) => ipcRenderer.invoke("ai:ask", id, q, s),

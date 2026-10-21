@@ -20,6 +20,14 @@ export type BlockRenderer = (source: string, el: HTMLElement, info: RenderInfo) 
 /** Draws an ![[name.ext]] embed into `el`. `target` is the file name as written; read it with `vault.read`. */
 export type EmbedRenderer = (target: string, el: HTMLElement, info: RenderInfo) => void | Cleanup | Promise<void | Cleanup>;
 
+export interface BlockOptions {
+  /**
+   * The vault file a block draws from, when its data lives in a file of its own. The block redraws
+   * whenever that file changes on disk, so an agent editing the file shows up live.
+   */
+  sourceFile?(source: string): string | null;
+}
+
 export interface Command {
   id: string;
   label: string;
@@ -31,7 +39,7 @@ export interface Railnote {
   /** The plugin's id, as declared in its manifest. */
   readonly id: string;
   /** Render ```lang blocks. One plugin owns each language. */
-  registerBlock(lang: string, render: BlockRenderer): void;
+  registerBlock(lang: string, render: BlockRenderer, options?: BlockOptions): void;
   /** Render ![[file.ext]] embeds for these extensions (without the dot). */
   registerEmbed(extensions: string[], render: EmbedRenderer): void;
   /** Add a command to the ⌘P palette. */

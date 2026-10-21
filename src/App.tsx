@@ -379,6 +379,15 @@ export function App() {
     ...(current ? [{ id: "close-tab", label: "Close tab", hint: "⌘W", run: () => void close(layout.focus, current) }] : []),
     { id: "tpl", label: "Insert template…", hint: "⌘T", run: () => setOverlay("templates") },
     { id: "settings", label: "Settings", hint: "⌘,", run: () => setOverlay("settings") },
+    {
+      id: "agent-skills",
+      label: "Teach agents to edit explainers",
+      run: () =>
+        void host
+          .installAgentSkills()
+          .then((w) => setNotice(w.length ? "Claude Code and other agents in this vault can now edit explainers: see .claude/skills/railnote-explainers." : "No agent skills in this build."))
+          .catch((e) => setNotice(`Couldn't add the skill: ${(e as Error).message}`)),
+    },
     ...plugins.commands,
   ];
 

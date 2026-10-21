@@ -12,6 +12,19 @@ await esbuild.build({
   logLevel: "info",
 });
 
+// The agent skill each vault gets: its instructions plus a checker built from the app's own checks.
+await esbuild.build({
+  entryPoints: ["scripts/explainer-check.ts"],
+  outfile: "dist-electron/skills/railnote-explainers/check.mjs",
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node18",
+  logLevel: "warning",
+});
+import fsSync from "fs";
+fsSync.copyFileSync("skills/railnote-explainers/SKILL.md", "dist-electron/skills/railnote-explainers/SKILL.md");
+
 // Exported notes carry the app's two typefaces inline; main hands them over from here.
 import fs from "fs";
 fs.mkdirSync("dist-electron/export-fonts", { recursive: true });

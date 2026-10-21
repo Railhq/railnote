@@ -27,7 +27,13 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 
 A plugin claims a code-block language or a file type, and Railnote hands it an element to draw into. It can also add commands to the ⌘P palette and read and write vault files. The whole API is in [`src/plugins/api.ts`](src/plugins/api.ts).
 
-**Explainers** is the built-in plugin: a ```` ```canviz ```` block or `![[file.canviz]]` embed plays an animated openCanviz explainer inline, and "Edit source" opens the `.canviz` file (needs the openCanviz engine checkout at build time; without it the block shows a notice). It can be switched off in Settings.
+**Explainers** is the built-in plugin: a ```` ```canviz ```` block or `![[file.canviz]]` embed plays an animated openCanviz explainer inline, and "Edit source" opens the `.canviz` file (needs the openCanviz engine checkout at build time; without it the block shows a notice). It can be switched off in Settings. A file exported from opencanviz.com with several scenes plays them one after another.
+
+### Explainers and coding agents
+
+An explainer is JSON on disk, so Claude Code or any other agent running in the vault can change it. When the file is saved, the note redraws the explainer at the same moment of playback. A save that doesn't parse or doesn't add up (an edge to a node that doesn't exist, say) leaves the last version that played on screen, with the problem and its line and column written above it.
+
+New vaults include an agent skill at `.claude/skills/railnote-explainers/`: `SKILL.md` covers where explainers live and how to edit one without breaking it, and `check.mjs` runs the app's own checks from the command line (`node .claude/skills/railnote-explainers/check.mjs Explainers/x.canviz`). `AGENTS.md` points agents at it. To add or update it in an existing vault, run "Teach agents to edit explainers" from the ⌘P palette. For writing new explainers from scratch, the full openCanviz authoring skill is `npx skills add opencanviz/opencanviz-skills-repo`.
 
 Your own plugins live in the vault, one folder each:
 
