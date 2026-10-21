@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
+import { folderLines, lineColour } from "../lib/lines";
 
 export type MainView = "home" | "note" | "tasks" | "inbox" | "source" | "graph";
 
@@ -26,6 +27,9 @@ interface Props {
   onOpenFile(path: string): void;
   /** Bumped by Cmd+Shift+F to switch to the search tab. */
   searchKey: number;
+  /** Folded down to a slim rail so the page has the window; the full sidebar peeks out over it. */
+  folded: boolean;
+  onFold(folded: boolean): void;
 }
 
 interface Tree {
@@ -62,9 +66,25 @@ export function Sidebar(p: Props) {
   const [moving, setMoving] = useState<Entry | null>(null);
   const [dropAt, setDropAt] = useState<string | null>(null);
   const idx = p.ws.index;
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef(0);
   useEffect(() => {
-    if (p.searchKey) setTab("search");
+    if (!p.searchKey) return;
+    setTab("search");
+    if (p.folded) setPeek(true);
   }, [p.searchKey]);
+  // Going somewhere puts the peeking sidebar away again.
+  useEffect(() => setPeek(false), [p.current, p.view, p.folded]);
+  useEffect(() => {
+    if (!peek) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPeek(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [peek]);
+  const peekSoon = () => { clearTimeout(peekTimer.current); peekTimer.current = window.setTimeout(() => setPeek(true), 180); };
+  const stayPut = () => clearTimeout(peekTimer.current);
+  // Leaving the peek closes it, unless a menu or a rename is still open in it.
+  const leavePeek = () => { stayPut(); if (!menu && !editing && !moving) peekTimer.current = window.setTimeout(() => setPeek(false), 260); };
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
@@ -239,8 +259,46 @@ export function Sidebar(p: Props) {
     return [["Open", () => p.onOpenFile(e.path)], ...common];
   };
 
+  const lines = folderLines(idx);
+  const today = new Date();
+  const slim = (
+    <aside className="sidebar slim" aria-label="Sidebar, folded" onMouseLeave={() => peek && leavePeek()}>
+      <div className="drag-region" />
+      <button className="slim-new" onClick={() => p.onNew()} title="New note in the inbox (⌘N)" aria-label="New note">+</button>
+      <button className={`slim-btn${p.view === "home" ? " on" : ""}`} onClick={() => p.onView("home")} title="Today" aria-label="Today">
+        <span className="slim-day">{today.getDate()}</span>
+      </button>
+      <button className={`slim-btn${p.view === "inbox" ? " on" : ""}`} onClick={() => p.onView("inbox")} title={`Inbox${inboxCount ? `, ${inboxCount} waiting` : ""}`} aria-label="Inbox">
+        <svg viewBox="0 0 20 20"><path d="M3 11.5 5 4h10l2 7.5V16H3z M3 11.5h4.5l1 2h3l1-2H17" /></svg>
+        {inboxCount > 0 && <span className="slim-badge">{inboxCount}</span>}
+      </button>
+      <button className={`slim-btn${p.view === "tasks" ? " on" : ""}`} onClick={() => p.onView("tasks")} title={`Tasks${openTasks ? `, ${openTasks} open` : ""}`} aria-label="Tasks">
+        <svg viewBox="0 0 20 20"><rect x="3.5" y="3.5" width="13" height="13" rx="3" /><path d="m7 10 2.2 2.2L13.5 8" /></svg>
+        {openTasks > 0 && <span className="slim-badge">{openTasks}</span>}
+      </button>
+      <button className={`slim-btn${p.view === "graph" ? " on" : ""}`} onClick={() => p.onView("graph")} title="Graph (⌥⌘G)" aria-label="Graph">
+        <svg viewBox="0 0 20 20"><path d="M4 15 9 10h7" /><circle cx="4" cy="15" r="2" /><circle cx="9.5" cy="10" r="2" /><circle cx="16" cy="10" r="2" /></svg>
+      </button>
+      {/* The folders as a strip of line colours; pointing at it opens the full map of notes. */}
+      <button className="slim-lines" onMouseEnter={peekSoon} onMouseLeave={stayPut} onClick={() => setPeek(true)} title="Your notes" aria-label="Show your notes">
+        {lines.map((l) => <i key={l} style={{ background: lineColour(lines, l + "/") }} title={l} />)}
+      </button>
+      <div className="slim-foot">
+        <button className="slim-btn" onClick={p.onSettings} title="Settings (⌘,)" aria-label="Settings">
+          <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.6" /><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" /></svg>
+        </button>
+        <button className="slim-btn rail-unfold" onClick={() => p.onFold(false)} title="Keep the sidebar open (⇧⌘\)" aria-label="Keep the sidebar open">
+          <svg viewBox="0 0 20 20"><path d="m8 5 5 5-5 5" /></svg>
+        </button>
+      </div>
+    </aside>
+  );
+  if (p.folded && !peek) return slim;
+
   return (
-    <aside className="sidebar">
+    <>
+    {p.folded && slim}
+    <aside className={`sidebar${p.folded ? " peek" : ""}`} onMouseEnter={stayPut} onMouseLeave={p.folded ? leavePeek : undefined}>
       <div className="drag-region" />
       <div className="nav">
         <button className="nav-new" onClick={() => p.onNew()} title="New note in the inbox (⌘N)">New note</button>
@@ -308,8 +366,12 @@ export function Sidebar(p: Props) {
       }} />}
       <div className="side-foot">
         <button onClick={p.onSettings}>Settings</button>
+        <button className="rail-fold" onClick={() => p.onFold(!p.folded)} title={p.folded ? "Keep the sidebar open (⇧⌘\\)" : "Fold the sidebar away (⇧⌘\\)"}>
+          {p.folded ? "Keep open" : "Fold away"}
+        </button>
       </div>
     </aside>
+    </>
   );
 }
 

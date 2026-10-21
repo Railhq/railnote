@@ -44,6 +44,11 @@ export function App() {
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [booting, setBooting] = useState(true);
   const [searchKey, setSearchKey] = useState(0);
+  // The sidebar starts folded so the page has the window; whichever way it's left is remembered.
+  const [folded, setFolded] = useState(() => { try { return localStorage.getItem("railnote:sidebar") !== "open"; } catch { return true; } });
+  const foldedRef = useRef(folded);
+  foldedRef.current = folded;
+  const fold = (f: boolean) => { setFolded(f); try { localStorage.setItem("railnote:sidebar", f ? "folded" : "open"); } catch { /* per-viewer nicety only */ } };
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [pluginList, setPluginList] = useState<PluginEntry[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -322,6 +327,7 @@ export function App() {
         "\\": () => void toggleSplit(),
       };
       if (e.shiftKey && k === "o" && current) act.o = () => organize(current);
+      if (e.shiftKey && e.code === "Backslash") act[k] = () => fold(!foldedRef.current);
       if (e.shiftKey && k === "f") act.f = () => setSearchKey((n) => n + 1);
       // Ctrl+Tab and Ctrl+Shift+Tab step through tabs; Cmd+1…9 picks one; Cmd+Alt+arrows switch panes.
       if (e.ctrlKey && k === "tab") act.tab = () => setLayout(cycle(l, e.shiftKey ? -1 : 1));
@@ -393,8 +399,8 @@ export function App() {
   };
 
   return (
-    <div className="app">
-      <Sidebar ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
+    <div className={`app${folded ? " folded" : ""}`}>
+      <Sidebar folded={folded} onFold={fold} ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
         {view !== "note" && <div className="drag-region" />}
         {view === "home" && <HomeView ws={ws} route={layout.panes[layout.focus].tabs.filter((t) => ws.index.notes.has(t))} here={layout.panes[layout.focus].active} onDaily={daily} onOpen={(p, line) => void open(p, line)} onOrganize={organize} onView={setView} />}

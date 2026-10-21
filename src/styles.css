@@ -71,6 +71,45 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .drag-region { height: 38px; -webkit-app-region: drag; flex-shrink: 0; }
 
 .app { display: grid; grid-template-columns: 264px 1fr; height: 100%; }
+.app.folded { grid-template-columns: 60px 1fr; }
+
+/* Folded: a slim rail, with the full sidebar peeking out over the page. */
+.sidebar.slim { align-items: center; gap: 4px; padding-bottom: 10px; }
+.slim-new {
+  width: 36px; height: 36px; border-radius: 10px; border: none; background: var(--signal); color: #1e1a10;
+  font-size: 22px; line-height: 1; font-weight: 500; margin: 4px 0 10px; display: grid; place-items: center; padding: 0;
+}
+.slim-new:hover { filter: brightness(1.06); }
+.slim-btn {
+  position: relative; width: 40px; height: 36px; border: none; border-radius: 8px; background: none; color: var(--rail-muted);
+  display: grid; place-items: center; padding: 0;
+}
+.slim-btn:hover { background: var(--rail-2); color: var(--rail-ink); }
+.slim-btn.on { background: var(--rail-2); color: var(--rail-ink); box-shadow: inset 3px 0 0 var(--signal); }
+.slim-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.slim-day {
+  width: 22px; height: 21px; border: 1.6px solid currentColor; border-top-width: 4px; border-radius: 4px;
+  font-size: 11px; font-weight: 700; line-height: 15px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.slim-badge {
+  position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
+  background: var(--signal); color: #1e1a10; font-size: 9.5px; font-weight: 700; line-height: 15px;
+}
+.slim-lines {
+  margin-top: 14px; flex: 1; min-height: 40px; width: 40px; border: none; background: none; padding: 6px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; border-radius: 8px;
+}
+.slim-lines:hover { background: var(--rail-2); }
+.slim-lines i { display: block; width: 6px; height: 26px; border-radius: 3px; flex-shrink: 0; }
+.slim-foot { display: flex; flex-direction: column; gap: 2px; }
+.sidebar.peek {
+  position: fixed; left: 60px; top: 0; bottom: 0; width: 264px; z-index: 30;
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.18); animation: peek-in 0.14s ease-out;
+}
+.sidebar.peek > .drag-region { height: 38px; }
+@keyframes peek-in { from { transform: translateX(-12px); opacity: 0; } }
+.side-foot { display: flex; justify-content: space-between; }
+.side-foot .rail-fold { font-size: 12px; }
 
 /* ---------- the rail ---------- */
 .sidebar { background: var(--rail); color: var(--rail-ink); display: flex; flex-direction: column; min-height: 0; }
@@ -442,7 +481,7 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .recent:hover { opacity: 1; color: var(--signal); }
 
 @media (max-width: 1100px) {
-  .app { grid-template-columns: 240px 1fr; }
+  .app:not(.folded) { grid-template-columns: 240px 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
