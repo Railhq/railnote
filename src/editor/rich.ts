@@ -1,6 +1,6 @@
 import { EditorView, WidgetType } from "@codemirror/view";
 import { editorHooks, fileUrl, whereFrom } from "./hooks";
-import { esc, renderMath, renderNote } from "../lib/render";
+import { cleanHtml, esc, renderMath, renderNote } from "../lib/render";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT, extOf, noteFolder } from "../lib/vault-index";
 
 // Widgets the live preview swaps in for Markdown that reads better drawn: attachments, tables,
@@ -173,6 +173,7 @@ export class TableWidget extends WidgetType {
     const wrap = document.createElement("div");
     wrap.className = "rn-table";
     wrap.innerHTML = `<table><thead>${rows.join("")}</tbody></table>`;
+    cleanHtml(wrap);
     loadFiles(wrap, view);
     wrap.addEventListener("mousedown", (e) => {
       if (followLinks(view, e)) return;
@@ -286,6 +287,7 @@ export class NoteEmbedWidget extends WidgetType {
     const folder = noteFolder(this.path);
     const resolveFile = (s: string) => hooks.resolveFile(s.includes("/") || !folder ? s : `${folder}/${s}`)?.path ?? hooks.resolveFile(s)?.path ?? null;
     body.innerHTML = this.content.trim() ? renderNote(this.content, { resolveFile, resolveNote: hooks.resolveNote, noteContent: hooks.noteContent }, 1) : `<p class="muted">${esc(this.target)} is empty.</p>`;
+    cleanHtml(body);
     loadFiles(body, view);
     wrap.append(head, body);
     wrap.addEventListener("mousedown", (e) => {

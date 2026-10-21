@@ -61,6 +61,16 @@ export function mediaTag(path: string, alt: string, size?: string): string {
   return `<a class="rn-attachment" ${file}>${esc(alt)}</a>`;
 }
 
+/** Notes can hold raw HTML, which Obsidian allows; drop the parts that run code. */
+export function cleanHtml(root: ParentNode) {
+  root.querySelectorAll("script, iframe:not(.rn-pdf), object, embed, frame, frameset, meta, base, link, form").forEach((el) => el.remove());
+  for (const el of root.querySelectorAll("*")) {
+    for (const a of [...el.attributes]) {
+      if (/^on/i.test(a.name) || (/^(href|src|xlink:href|action|formaction)$/i.test(a.name) && /^\s*(javascript|vbscript):/i.test(a.value))) el.removeAttribute(a.name);
+    }
+  }
+}
+
 export function renderNote(src: string, opts: RenderOptions, depth = 0): string {
   const body = src.slice(parseFrontmatter(src).end);
   const mathOut = opts.mathOutput ?? "htmlAndMathml";

@@ -69,6 +69,8 @@ export class CanvizPlayer {
   private lastTick = 0;
   private visible = true;
   private observers: { disconnect(): void }[] = [];
+  /** Settles once icons are parsed and the frame on screen is final. */
+  readonly ready: Promise<void>;
 
   constructor(private root: HTMLElement, data: DiagramData, private opts: PlayerOptions = {}) {
     this.nodes = data.nodes ?? [];
@@ -121,7 +123,7 @@ export class CanvizPlayer {
     if (opts.autoplay) this.play();
     // Icons draw blank until parsed; show the first frame now and redraw once they're in.
     const lists = [this.nodes, ...this.steps.map((s) => s.nodes ?? [])];
-    resolveSvgAssets(lists).then((patched) => { if (patched) this.render(); });
+    this.ready = resolveSvgAssets(lists).then((patched) => { if (patched) this.render(); }, () => {});
   }
 
   play() {
@@ -136,6 +138,12 @@ export class CanvizPlayer {
     this.playing = false;
     cancelAnimationFrame(this.raf);
     this.updateControls();
+  }
+
+  /** Jumps to `ms` (clamped to the explainer's length) and draws that frame. */
+  seek(ms: number) {
+    this.t = Math.max(0, Math.min(ms, this.total));
+    this.render();
   }
 
   destroy() {

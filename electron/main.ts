@@ -211,6 +211,13 @@ function registerIpc() {
     if (err) throw new Error(err);
   });
   ipcMain.handle("vault:reveal", (_e, p: string) => shell.showItemInFolder(need().resolve(p)));
+  ipcMain.handle("export:asset", async (_e, name: string) => {
+    for (const dir of [path.join(__dirname, "..", "dist-export"), path.join(__dirname, "export-fonts")]) {
+      const b = await fs.readFile(path.join(dir, path.basename(name))).catch(() => null);
+      if (b) return b.toString("base64");
+    }
+    return null;
+  });
   ipcMain.handle("export:save", async (_e, name: string, kind: "html" | "pdf", html: string) => {
     // Tests set RAILNOTE_EXPORT_DIR to skip the dialog.
     const target = process.env.RAILNOTE_EXPORT_DIR
@@ -248,6 +255,9 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
+        { label: "Export to HTML…", click: send("export-html") },
+        { label: "Export to PDF…", accelerator: "CmdOrCtrl+Alt+P", click: send("export-pdf") },
+        { type: "separator" },
         { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: send("close-tab") },
         { label: "Close Window", accelerator: "CmdOrCtrl+Shift+W", role: "close" },
         ...(mac ? [] : [{ role: "quit" as const }]),

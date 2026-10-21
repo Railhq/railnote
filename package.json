@@ -7,7 +7,8 @@
   "scripts": {
     "build:electron": "node scripts/build-electron.mjs",
     "build:renderer": "vite build",
-    "build": "tsc --noEmit && npm run build:electron && npm run build:renderer",
+    "build:export": "node -e \"process.exit(require('fs').existsSync(require('path').join(process.env.OPENCANVIZ_APP||require('os').homedir()+'/animated-diagram-editor-app','src/components/diagram'))?0:1)\" && vite build -c vite.export.config.ts || echo 'No openCanviz engine: exports show explainers as a notice'",
+    "build": "tsc --noEmit && npm run build:electron && npm run build:renderer && npm run build:export",
     "start": "npm run build && electron .",
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env RAILNOTE_DEV=1 electron .\""
   },

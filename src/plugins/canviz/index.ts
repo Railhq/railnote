@@ -13,7 +13,7 @@ function sourceFile(source: string): string | null {
 // autoplay: true
 // ```
 // or the DiagramData JSON inline.
-async function loadExplainer(source: string, read: (src: string) => Promise<string>): Promise<{ data: DiagramData; opts: PlayerOptions }> {
+export async function loadExplainer(source: string, read: (src: string) => Promise<string>): Promise<{ data: DiagramData; opts: PlayerOptions }> {
   const text = source.trim();
   if (text.startsWith("{")) return { data: JSON.parse(text), opts: {} };
   const spec: Record<string, string> = {};

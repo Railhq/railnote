@@ -14,6 +14,7 @@ import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
 import { SourceView } from "./components/SourceView";
 import { NotePane, PaneHandle } from "./components/NotePane";
+import { exportNote, type ExportKind } from "./export/export";
 
 type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string };
 
@@ -143,6 +144,18 @@ export function App() {
   const closeRef = useRef(close);
   closeRef.current = close;
 
+  /** Saves open edits first, so the export has what's on screen. */
+  const exportCurrent = async (path: string, kind: ExportKind) => {
+    await flush();
+    try {
+      if (await exportNote(ws!, path, kind)) setNotice(`Exported ${ws!.index.notes.get(path)?.name ?? path} to ${kind.toUpperCase()}.`);
+    } catch (e) {
+      setNotice(`Couldn't export: ${(e as Error).message}`);
+    }
+  };
+  const exportRef = useRef(exportCurrent);
+  exportRef.current = exportCurrent;
+
   // Keep the index in step with the disk; open notes notice changes themselves.
   useEffect(() => {
     if (!ws) return;
@@ -192,6 +205,7 @@ export function App() {
       const l = layoutRef.current;
       const p = l.panes[l.focus]?.active;
       if (cmd === "close-tab" && p) void closeRef.current(l.focus, p);
+      if ((cmd === "export-html" || cmd === "export-pdf") && p) void exportRef.current(p, cmd === "export-html" ? "html" : "pdf");
     });
     return () => {
       offIndex();
@@ -331,6 +345,12 @@ export function App() {
     return hits;
   };
   const commands: PaletteItem[] = [
+    ...(current
+      ? [
+          { id: "export-html", label: "Export to HTML", run: () => void exportCurrent(current, "html") },
+          { id: "export-pdf", label: "Export to PDF", hint: "⌥⌘P", run: () => void exportCurrent(current, "pdf") },
+        ]
+      : []),
     { id: "new", label: "New note", hint: "⌘N", run: () => newNote() },
     { id: "daily", label: "Open today's note", hint: "⌘D", run: daily },
     { id: "switch", label: "Open note…", hint: "⌘K", run: () => setOverlay("switcher") },

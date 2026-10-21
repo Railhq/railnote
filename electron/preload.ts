@@ -23,6 +23,7 @@ const api: HostApi = {
   mkdir: (p) => ipcRenderer.invoke("vault:mkdir", p),
   openInSystem: (p) => ipcRenderer.invoke("vault:openInSystem", p),
   revealInFinder: (p) => ipcRenderer.invoke("vault:reveal", p),
+  exportAsset: (name) => ipcRenderer.invoke("export:asset", name),
   saveExport: (name, kind, html) => ipcRenderer.invoke("export:save", name, kind, html),
   listVaultPlugins: () => ipcRenderer.invoke("plugins:list"),
   findByName: (name) => ipcRenderer.invoke("vault:findByName", name),

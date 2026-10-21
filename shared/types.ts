@@ -93,6 +93,8 @@ export interface HostApi {
   openInSystem(path: string): Promise<void>;
   revealInFinder(path: string): Promise<void>;
   /** Asks where to save, then writes `content` there. False if the user cancelled. */
+  /** Base64 of a file the export player build shipped (player.js, hand pictures), or null without one. */
+  exportAsset(name: string): Promise<string | null>;
   saveExport(defaultName: string, kind: "html" | "pdf", html: string): Promise<boolean>;
   /** Vault path of the first file with this name anywhere in the vault, for ![[embeds]]. */
   findByName(name: string): Promise<string | null>;
