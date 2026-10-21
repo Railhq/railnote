@@ -233,6 +233,8 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .rn-link { color: var(--link); cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--signal) 55%, transparent); text-underline-offset: 3px; }
 .rn-link.unresolved { color: var(--muted); text-decoration-style: dotted; }
 .rn-ext { color: var(--link); }
+.rn-mermaid { display: flex; justify-content: center; padding: 8px 0; overflow-x: auto; }
+.rn-mermaid svg { max-width: 100%; height: auto; }
 .rn-footnotes { border-top: 1px solid var(--line); margin-top: 24px; font-size: 0.88em; color: var(--ink-2); }
 
 /* Explainer player: framed like a plate in a book. */
