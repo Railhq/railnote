@@ -8,7 +8,7 @@ import { PluginEntry, syncPlugins } from "./plugins/loader";
 import { extOf, fileName, isMedia, noteFolder } from "./lib/vault-index";
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
-import { MainView, Sidebar } from "./components/Sidebar";
+import { EntryKind, MainView, Sidebar } from "./components/Sidebar";
 import { RightPanel } from "./components/RightPanel";
 import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
@@ -228,10 +228,10 @@ export function App() {
     return () => window.removeEventListener("beforeunload", save);
   }, [flush]);
 
-  const newNote = async () => {
+  const newNote = async (folder?: string) => {
     if (!ws) return;
     await flush();
-    const p = await ws.createNote(ws.settings.inboxFolder, "Untitled", "");
+    const p = await ws.createNote(folder ?? ws.settings.inboxFolder, "Untitled", "");
     loadNote(ws, p);
   };
   const daily = async () => {
@@ -239,12 +239,35 @@ export function App() {
     await flush();
     open(await ws.daily());
   };
-  const remove = async (p: string) => {
+  const remove = async (p: string, kind: EntryKind = "note") => {
     if (!ws) return;
+    await flush();
     await host.remove(p);
-    ws.index.remove(p);
-    if (p === currentRef.current) loadNote(ws, null);
+    const cur = currentRef.current;
+    if (kind === "note") ws.index.remove(p);
+    else if (kind === "file") ws.index.setFile(p, false);
+    else {
+      for (const n of ws.index.all()) if (n.path.startsWith(p + "/")) ws.index.remove(n.path);
+      for (const f of [...ws.index.files.keys()]) if (f.startsWith(p + "/")) ws.index.setFile(f, false);
+      for (const d of [...ws.index.dirs]) if (d === p || d.startsWith(p + "/")) ws.index.setFolder(d, false);
+    }
+    if (cur && (cur === p || cur.startsWith(p + "/"))) loadNote(ws, null);
   };
+  /** Sidebar renames and moves. Notes and folders keep their [[links]] working. */
+  const moveEntry = async (kind: EntryKind, from: string, to: string) => {
+    if (!ws) return;
+    await flush();
+    const cur = currentRef.current;
+    if (kind === "note") {
+      const dst = await ws.rename(from, to);
+      if (cur === from) loadNote(ws, dst);
+    } else if (kind === "file") await ws.moveFile(from, to);
+    else {
+      const moved = await ws.moveFolder(from, to);
+      if (cur && moved.has(cur)) loadNote(ws, moved.get(cur)!);
+    }
+  };
+  const openFile = (p: string) => void host.openInSystem(p).catch((e) => setNotice((e as Error).message));
   const renameCurrent = async (name: string) => {
     if (!ws || !current) return;
     const n = ws.index.notes.get(current);
@@ -310,7 +333,7 @@ export function App() {
         k: () => setOverlay("switcher"),
         o: () => setOverlay("switcher"),
         p: () => setOverlay("commands"),
-        n: newNote,
+        n: () => newNote(),
         d: daily,
         t: () => setOverlay("templates"),
         j: () => setRightTab("ask"),
@@ -338,7 +361,7 @@ export function App() {
     return hits;
   };
   const commands: PaletteItem[] = [
-    { id: "new", label: "New note", hint: "⌘N", run: newNote },
+    { id: "new", label: "New note", hint: "⌘N", run: () => newNote() },
     { id: "daily", label: "Open today's note", hint: "⌘D", run: daily },
     { id: "switch", label: "Open note…", hint: "⌘K", run: () => setOverlay("switcher") },
     { id: "search", label: "Search all notes", hint: "⇧⌘F", run: () => setSearchKey((n) => n + 1) },
@@ -353,7 +376,7 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar ws={ws} current={current} view={view} onOpen={(p) => open(p)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} searchKey={searchKey} />
+      <Sidebar ws={ws} current={current} view={view} onOpen={(p) => open(p)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
         <div className="drag-region" />
         {view === "tasks" && <TasksView ws={ws} onOpen={open} />}
@@ -433,7 +456,7 @@ export function App() {
         {view === "note" && !note && (
           <div className="empty-main">
             <p>No note open.</p>
-            <button onClick={newNote}>New note</button> <button onClick={daily}>Today's note</button>
+            <button onClick={() => newNote()}>New note</button> <button onClick={daily}>Today's note</button>
             <p className="muted small">Press ⌘K to jump to any note, or ⌘P for every command.</p>
           </div>
         )}

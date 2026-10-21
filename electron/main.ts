@@ -273,6 +273,17 @@ app.whenReady().then(async () => {
   app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });
 
+// Stop watching before quitting: fsevents can deadlock in its teardown at exit when watched
+// folders were renamed or moved while the app ran.
+let watcherClosed = false;
+app.on("before-quit", (e) => {
+  if (watcherClosed || !vault) return;
+  e.preventDefault();
+  watcherClosed = true;
+  const done = () => app.quit();
+  Promise.race([vault.close(), new Promise((r) => setTimeout(r, 2000))]).then(done, done);
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });

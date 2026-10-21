@@ -87,6 +87,72 @@ export class Workspace {
     return to;
   }
 
+  /** Moves or renames an attachment, rewriting links that name it by path. */
+  async moveFile(from: string, to: string): Promise<string> {
+    if (from === to) return from;
+    await host.rename(from, to);
+    this.index.setFile(from, false);
+    this.index.setFile(to, true);
+    await this.rewritePaths((p) => (p.toLowerCase() === from.toLowerCase() ? to : null));
+    return to;
+  }
+
+  /**
+   * Moves or renames a folder with everything in it. Links by name keep resolving; links written
+   * as a path into the folder are rewritten. Returns old path -> new path for each note moved.
+   */
+  async moveFolder(from: string, to: string): Promise<Map<string, string>> {
+    const moved = new Map<string, string>();
+    if (from === to) return moved;
+    if (to.toLowerCase().startsWith(from.toLowerCase() + "/")) throw new Error("A folder can't go inside itself.");
+    if (this.index.dirs.has(to) || this.index.folders().includes(to)) throw new Error(`${to} already exists`);
+    await host.rename(from, to);
+    const prefix = from + "/";
+    const shift = (p: string) => (p.startsWith(prefix) ? to + p.slice(from.length) : null);
+    for (const n of this.index.all()) {
+      const dst = shift(n.path);
+      if (!dst) continue;
+      moved.set(n.path, dst);
+      this.index.remove(n.path);
+      this.index.upsert({ path: dst, content: n.content, mtime: Date.now() });
+    }
+    for (const f of [...this.index.files.keys()]) {
+      const dst = shift(f);
+      if (dst) this.index.setFile(f, false), this.index.setFile(dst, true);
+    }
+    for (const d of [...this.index.dirs]) {
+      const dst = d === from ? to : shift(d);
+      if (dst) this.index.setFolder(d, false), this.index.setFolder(dst, true);
+    }
+    const lower = prefix.toLowerCase();
+    await this.rewritePaths((p) => (p.toLowerCase().startsWith(lower) ? to + p.slice(from.length) : null));
+    return moved;
+  }
+
+  async createFolder(path: string) {
+    await host.mkdir(path);
+    this.index.setFolder(path, true);
+  }
+
+  /** Rewrites path-style [[links]], ![[embeds]] and ![](images) where `map` returns a new path. */
+  private async rewritePaths(map: (path: string) => string | null) {
+    for (const n of this.index.all()) {
+      let next = n.content.replace(/(!?)\[\[([^\]|#\n]+)([^\]\n]*)\]\]/g, (m, bang, target: string, rest) => {
+        const t = target.trim();
+        if (!t.includes("/")) return m;
+        const md = !/\.[\w-]+$/.test(t) || t.endsWith(".md");
+        const hit = map(md && !t.endsWith(".md") ? t + ".md" : t);
+        return hit ? `${bang}[[${md && !t.endsWith(".md") ? hit.replace(/\.md$/, "") : hit}${rest}]]` : m;
+      });
+      next = next.replace(/(!\[[^\]]*\]\()<?([^)\s>]+)>?\)/g, (m, head, href: string) => {
+        if (/^\w+:/.test(href)) return m;
+        const hit = map(decodeURI(href));
+        return hit ? `${head}${encodeURI(hit)})` : m;
+      });
+      if (next !== n.content) await this.write(n.path, next);
+    }
+  }
+
   async toggleTask(path: string, line: number) {
     const n = this.index.notes.get(path);
     if (!n) return;

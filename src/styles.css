@@ -373,3 +373,19 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
   padding: 9px 14px; border-radius: 8px; background: var(--rail); color: var(--rail-ink); font-size: 13px;
   box-shadow: inset 3px 0 0 var(--signal);
 }
+
+/* Sidebar file operations */
+.tree-note.file { opacity: 0.62; font-size: 0.94em; }
+.tree-note.file::after { border-radius: 2px; width: 8px; height: 8px; left: calc(var(--x) - 3px); top: calc(50% - 4px); }
+.tree-group.drop > .tree-folder, .tree-root.drop { background: color-mix(in srgb, var(--signal) 22%, transparent); }
+.side-body:has(> .tree-root) { display: flex; flex-direction: column; }
+.tree-root { flex: 1 0 auto; padding-bottom: 24px; }
+.tree-rename { width: 100%; padding: 1px 6px; font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--signal); border-radius: 4px; }
+.menu {
+  position: fixed; z-index: 60; min-width: 180px; padding: 5px; display: flex; flex-direction: column;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 40px rgba(15, 28, 24, 0.28);
+}
+.menu button { text-align: left; border: none; background: none; padding: 6px 10px; border-radius: 5px; font-size: 13px; color: var(--ink); }
+.menu button:hover { background: var(--rail); color: var(--rail-ink); }
+.menu button.danger { color: var(--danger); }
+.menu button.danger:hover { background: var(--danger); color: #fff; }

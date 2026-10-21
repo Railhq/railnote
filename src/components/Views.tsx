@@ -48,7 +48,7 @@ export function InboxView({ ws, onOpen, onOrganize, onNew }: { ws: Workspace; on
     <div className="page">
       <div className="page-head">
         <h1>Inbox</h1>
-        <button className="primary" onClick={onNew}>Capture a note</button>
+        <button className="primary" onClick={() => onNew()}>Capture a note</button>
       </div>
       <p className="muted">Write first, file later. Organize asks Claude where a note belongs; you approve each change.</p>
       {!notes.length && <div className="empty">Inbox zero.</div>}
