@@ -1,5 +1,4 @@
-import { evaluateAt, drawScene, normalizeStepsToFullSnapshots } from "@canviz-engine";
-import { resolveSvgAssets } from "./assets";
+import { createPlayer, buildProjectTimeline, toProject, type ProjectRenderer } from "@canviz-engine";
 
 export interface DiagramData {
   nodes?: any[];
@@ -17,42 +16,6 @@ export interface PlayerOptions {
   speed?: number;
 }
 
-interface Box { x: number; y: number; width: number; height: number }
-
-/**
- * A multi-scene openCanviz project (`diagrams: [...]`, what opencanviz.com imports and exports)
- * as one doc: each scene's steps resolve to full snapshots and play one after another, so a scene
- * starts from its own first step. Scene transitions become cuts. A flat doc comes back unchanged.
- */
-export function flattenProject(d: DiagramData & { diagrams?: DiagramData[]; title?: string }): DiagramData {
-  if (!Array.isArray(d.diagrams)) return d;
-  const scenes = d.diagrams.filter((s) => s && typeof s === "object");
-  return {
-    nodes: scenes[0]?.nodes ?? [],
-    edges: scenes[0]?.edges ?? [],
-    steps: scenes.flatMap((s) => (s.steps?.length ? normalizeStepsToFullSnapshots(s.steps) : [])),
-    paths: Object.assign({}, d.paths, ...scenes.map((s) => s.paths ?? {})),
-    artboard: d.artboard ?? scenes[0]?.artboard,
-    metadata: { title: d.title ?? d.metadata?.title },
-  };
-}
-
-// Artboard the doc declares, else the bounds of its base nodes with some padding.
-function resolveArtboard(d: DiagramData): Box {
-  const a = d.artboard;
-  if (a && a.width > 0 && a.height > 0) return a;
-  const nodes = d.nodes ?? [];
-  if (nodes.length === 0) return { x: -640, y: -360, width: 1280, height: 720 };
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const n of nodes) {
-    const w = n.width ?? 0, h = n.height ?? 0;
-    minX = Math.min(minX, n.x - w / 2); maxX = Math.max(maxX, n.x + w / 2);
-    minY = Math.min(minY, n.y - h / 2); maxY = Math.max(maxY, n.y + h / 2);
-  }
-  const pad = 60;
-  return { x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
-}
-
 function el<K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tag: K, cls?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -65,52 +28,57 @@ function fmt(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** Canvas player for one DiagramData doc. Call destroy() when its element goes away. */
+/** Where each scene and step starts, for the "scene 2/5" or "step 3/8" label. */
+interface Marks { scenes: number[]; steps: number[] }
+
+function marksOf(project: any): Marks {
+  const timeline = buildProjectTimeline(project);
+  const steps: number[] = [];
+  for (const slice of timeline.slices) {
+    let acc = slice.startMs;
+    for (const st of project.diagrams[slice.sceneIndex].steps ?? []) { steps.push(acc); acc += st.durationMs ?? 0; }
+  }
+  return { scenes: timeline.slices.map((s) => s.startMs), steps };
+}
+
+const indexAt = (starts: number[], t: number) => {
+  let i = 0;
+  while (i < starts.length - 1 && t >= starts[i + 1]) i++;
+  return i;
+};
+
+/**
+ * Canvas player for one explainer: a single scene or a multi-scene project, drawn by
+ * @opencanviz/player so scene transitions play as they do on the site. Call destroy() when its
+ * element goes away.
+ */
 export class CanvizPlayer {
   private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private stage: HTMLDivElement;
   private playBtn: HTMLButtonElement;
   private scrub: HTMLInputElement;
   private timeLabel: HTMLElement;
-  private steps: any[];
-  private nodes: any[];
-  private edges: any[];
-  private paths: Record<string, any>;
-  private artboard: Box;
-  private background: string;
-  private bg: any;
-  private boundaries: number[] = [];
+  private renderer: ProjectRenderer | null = null;
+  private marks: Marks = { scenes: [0], steps: [] };
   private total = 0;
   private t = 0;
   private playing = false;
   private raf = 0;
   private lastTick = 0;
   private visible = true;
+  private builtFor = 0;
+  private destroyed = false;
   private observers: { disconnect(): void }[] = [];
-  /** Settles once icons are parsed and the frame on screen is final. */
+  /** Settles once fonts, icons and pictures are in and the frame on screen is final. */
   readonly ready: Promise<void>;
 
-  constructor(private root: HTMLElement, doc: DiagramData, private opts: PlayerOptions = {}) {
-    const data = flattenProject(doc);
-    this.nodes = data.nodes ?? [];
-    this.edges = data.edges ?? [];
-    this.paths = data.paths ?? {};
-    // The engine assumes full snapshots; delta-format docs come out blank past step 0 without this.
-    this.steps = (data.steps?.length ? normalizeStepsToFullSnapshots(data.steps) : []) as any[];
-    this.artboard = resolveArtboard(data);
-    this.background = data.artboard?.background ?? "#ffffff";
-    this.bg = data.artboard?.bg ?? null;
-
-    let acc = 0;
-    this.boundaries = [0];
-    for (const s of this.steps) { acc += s.durationMs ?? 0; this.boundaries.push(acc); }
-    this.total = acc;
-
+  constructor(private root: HTMLElement, private doc: DiagramData, private opts: PlayerOptions = {}) {
     root.classList.add("canviz-player");
-    const stage = el(root, "div", "canviz-stage");
-    stage.style.aspectRatio = `${this.artboard.width} / ${this.artboard.height}`;
-    this.canvas = el(stage, "canvas");
-    this.ctx = this.canvas.getContext("2d")!;
+    this.stage = el(root, "div", "canviz-stage");
+    const project = toProject(doc);
+    this.stage.style.aspectRatio = `${project.artboard.width} / ${project.artboard.height}`;
+    this.canvas = el(this.stage, "canvas");
+    try { this.marks = marksOf(project); } catch { /* label falls back to time only */ }
 
     const bar = el(root, "div", "canviz-controls");
     this.playBtn = el(bar, "button", "canviz-play");
@@ -118,16 +86,20 @@ export class CanvizPlayer {
     this.scrub = el(bar, "input", "canviz-scrub");
     this.scrub.type = "range";
     this.scrub.min = "0";
-    this.scrub.max = String(this.total);
+    this.scrub.max = "0";
     this.scrub.step = "10";
     this.timeLabel = el(bar, "span", "canviz-time");
 
     this.playBtn.onclick = () => (this.playing ? this.pause() : this.play());
-    stage.onclick = () => (this.playing ? this.pause() : this.play());
+    this.stage.onclick = () => (this.playing ? this.pause() : this.play());
     this.scrub.oninput = () => { this.t = Number(this.scrub.value); this.render(); };
 
-    const ro = new ResizeObserver(() => this.resize());
-    ro.observe(stage);
+    // The renderer draws at a fixed pixel size; rebuild it only when the block grows well past
+    // what it was built for, so a wider window stays sharp without re-preparing on every pixel.
+    const ro = new ResizeObserver(() => {
+      if (this.renderer && this.wantedHeight() > this.builtFor * 1.25) void this.build();
+    });
+    ro.observe(this.stage);
     this.observers.push(ro);
     // Don't burn CPU animating explainers scrolled out of view.
     const io = new IntersectionObserver(([e]) => {
@@ -137,12 +109,10 @@ export class CanvizPlayer {
     io.observe(root);
     this.observers.push(io);
 
-    this.resize();
     this.updateControls();
-    if (opts.autoplay) this.play();
-    // Icons draw blank until parsed; show the first frame now and redraw once they're in.
-    const lists = [this.nodes, ...this.steps.map((s) => s.nodes ?? [])];
-    this.ready = resolveSvgAssets(lists).then((patched) => { if (patched) this.render(); }, () => {});
+    this.ready = this.build().then(() => {
+      if (opts.autoplay && !this.destroyed) this.play();
+    });
   }
 
   play() {
@@ -159,20 +129,39 @@ export class CanvizPlayer {
     this.updateControls();
   }
 
-  /** Jumps to `ms` (clamped to the explainer's length) and draws that frame. */
   /** Where the playhead is, in ms. */
   get time() {
     return this.t;
   }
 
+  /** Jumps to `ms` (clamped to the explainer's length) and draws that frame. */
   seek(ms: number) {
     this.t = Math.max(0, Math.min(ms, this.total));
     this.render();
   }
 
   destroy() {
+    this.destroyed = true;
     this.pause();
     this.observers.forEach((o) => o.disconnect());
+  }
+
+  private wantedHeight(): number {
+    const h = this.stage.getBoundingClientRect().height || 360;
+    return Math.min(2160, Math.max(240, Math.round(h * (window.devicePixelRatio || 1))));
+  }
+
+  private async build() {
+    const height = this.wantedHeight();
+    const r = await createPlayer(this.canvas, this.doc, { targetHeight: height, showCaptions: this.opts.captions !== false });
+    if (this.destroyed) return;
+    await r.imagesReady;
+    this.renderer = r;
+    this.builtFor = height;
+    this.total = r.totalDurationMs;
+    this.scrub.max = String(this.total);
+    this.t = Math.min(this.t, this.total);
+    this.render();
   }
 
   private loop() {
@@ -192,33 +181,10 @@ export class CanvizPlayer {
     this.raf = requestAnimationFrame(tick);
   }
 
-  private resize() {
-    const rect = this.canvas.parentElement!.getBoundingClientRect();
-    if (rect.width === 0) return;
-    const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = Math.round(rect.width * dpr);
-    this.canvas.height = Math.round(rect.height * dpr);
-    this.render();
-  }
-
   private render() {
-    const { width: w, height: h } = this.canvas;
-    if (w === 0 || h === 0) return;
-    const a = this.artboard;
-    const camera = { x: a.x + a.width / 2, y: a.y + a.height / 2, zoom: Math.min(w / a.width, h / a.height) };
+    if (!this.renderer) return;
     // Ending exactly on the last boundary evaluates past the final step; hold its last frame instead.
-    const t = Math.min(this.t, Math.max(0, this.total - 1));
-    const state = evaluateAt(t, this.steps, this.paths, this.nodes, this.edges);
-    this.ctx.clearRect(0, 0, w, h);
-    drawScene(this.ctx, state, w, h, {
-      flowEnabled: true,
-      backgroundColor: this.background,
-      background: this.bg,
-      currentTimeMs: t,
-      camera,
-      baseNodes: this.nodes,
-      showCaptions: this.opts.captions !== false,
-    });
+    this.renderer.renderFrameAt(Math.min(this.t, Math.max(0, this.total - 1)));
     this.updateControls();
   }
 
@@ -226,8 +192,10 @@ export class CanvizPlayer {
     this.playBtn.textContent = this.playing ? "❚❚" : "▶";
     this.playBtn.setAttribute("aria-label", this.playing ? "Pause" : "Play");
     this.scrub.value = String(this.t);
-    let step = 0;
-    while (step < this.boundaries.length - 2 && this.t >= this.boundaries[step + 1]) step++;
-    this.timeLabel.textContent = `${fmt(this.t)} / ${fmt(this.total)} · step ${Math.min(step + 1, this.steps.length)}/${this.steps.length}`;
+    const { scenes, steps } = this.marks;
+    const where = scenes.length > 1
+      ? ` · scene ${indexAt(scenes, this.t) + 1}/${scenes.length}`
+      : steps.length ? ` · step ${indexAt(steps, this.t) + 1}/${steps.length}` : "";
+    this.timeLabel.textContent = `${fmt(this.t)} / ${fmt(this.total)}${where}`;
   }
 }

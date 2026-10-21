@@ -4,11 +4,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-// Explainer playback compiles the openCanviz engine from its source checkout. Without one,
+// Explainer playback compiles @opencanviz/player from the openCanviz app checkout. Without one,
 // canviz blocks render a notice instead and the rest of the app is unaffected.
 const APP = process.env.OPENCANVIZ_APP || path.join(os.homedir(), "animated-diagram-editor-app");
-const ENGINE = path.join(APP, "src/components/diagram");
-const hasEngine = fs.existsSync(ENGINE);
+const PLAYER = path.join(APP, "packages/player/src/index.ts");
+const hasEngine = fs.existsSync(PLAYER);
 
 export default defineConfig({
   base: "./",
@@ -17,7 +17,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@canviz-engine": path.resolve(hasEngine ? "src/plugins/canviz/engine.ts" : "src/plugins/canviz/engine-missing.ts"),
-      "@engine": ENGINE,
+      "@opencanviz/player": PLAYER,
+      "@canviz-fonts": path.join(APP, "public/fonts"),
       "@canviz-hands": path.join(APP, "public/hands"),
       "lottie-web": path.resolve("src/plugins/canviz/stubs/lottie-web.ts"),
     },

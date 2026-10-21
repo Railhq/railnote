@@ -12,7 +12,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@canviz-engine": path.resolve("src/export/engine.ts"),
-      "@engine": path.join(APP, "src/components/diagram"),
+      "@opencanviz/player": path.join(APP, "packages/player/src/index.ts"),
       "lottie-web": path.resolve("src/plugins/canviz/stubs/lottie-web.ts"),
     },
   },
