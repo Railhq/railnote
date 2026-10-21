@@ -5,7 +5,7 @@ import { Editor } from "./editor/Editor";
 import { setLinkResolver } from "./editor/live-preview";
 import { plugins } from "./plugins/host";
 import { PluginEntry, syncPlugins } from "./plugins/loader";
-import { noteFolder } from "./lib/vault-index";
+import { extOf, fileName, isMedia, noteFolder } from "./lib/vault-index";
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
 import { MainView, Sidebar } from "./components/Sidebar";
@@ -49,6 +49,7 @@ export function App() {
     const s = await host.getSettings();
     const w = new Workspace(s);
     w.index.load(files);
+    w.index.setListing(await host.listFiles());
     setSettings(s);
     setWs(w);
     const start = w.index.notes.has("Welcome.md") ? "Welcome.md" : w.index.all().sort((a, b) => b.mtime - a.mtime)[0]?.path ?? null;
@@ -120,6 +121,13 @@ export function App() {
     async (target: string) => {
       if (!ws) return;
       const [name, heading] = target.split("#");
+      // [[report.pdf]] and other attachments open in their own app, never as a new note.
+      const ext = extOf(name);
+      if (ext && ext !== "md") {
+        const p = ws.index.resolveFile(name, noteFolder(currentRef.current ?? ""));
+        if (!p) return setNotice(`Couldn't find ${name} in this vault.`);
+        return host.openInSystem(p).catch((e) => setNotice((e as Error).message));
+      }
       const p = await ws.resolveOrCreate(name || ws.index.notes.get(currentRef.current ?? "")?.name || "");
       const h = heading ? ws.index.notes.get(p)?.parsed.headings.find((x) => x.text.toLowerCase() === heading.trim().toLowerCase()) : undefined;
       open(p, h?.line);
@@ -176,6 +184,8 @@ export function App() {
     });
     const offVault = host.onVaultEvent((e) => {
       if (e.type === "upsert") ws.index.upsert(e.file);
+      else if (e.type === "file") ws.index.setFile(e.path, e.exists);
+      else if (e.type === "folder") ws.index.setFolder(e.path, e.exists);
       else {
         ws.index.remove(e.path);
         if (e.path === currentRef.current) setCurrent(null);
@@ -251,6 +261,38 @@ export function App() {
     await flush();
     setOverlay({ organize: p });
   };
+  /** Pasted or dropped files are saved into the attachments folder and embedded where they landed. */
+  const addFiles = async (files: File[], pos: number) => {
+    if (!ws || !current) return;
+    const setting = (ws.settings.attachmentsFolder ?? "Attachments").replace(/\/+$/, "");
+    const folder = setting === "." || setting === "./" || setting.startsWith("./") ? [noteFolder(current), setting.slice(2)].filter(Boolean).join("/") : setting;
+    const d = new Date();
+    const stamp = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join("");
+    const refs: string[] = [];
+    for (const f of files) {
+      const ext = extOf(f.name) || (f.type.split("/")[1] ?? "bin");
+      // Screenshots arrive as "image.png"; name them the way Obsidian does.
+      const name = !f.name || /^image\.\w+$/.test(f.name) ? `Pasted image ${stamp}.${ext}` : f.name;
+      try {
+        const path = await host.saveAttachment(folder, name, new Uint8Array(await f.arrayBuffer()));
+        ws.index.setFile(path, true);
+        const ref = ws.index.resolveFile(fileName(path)) === path ? fileName(path) : path;
+        refs.push(isMedia(extOf(path)) ? `![[${ref}]]` : `[[${ref}]]`);
+      } catch (e) {
+        setNotice(`Couldn't save ${f.name}: ${(e as Error).message}`);
+      }
+    }
+    const v = editorView.current;
+    if (!v || !refs.length) return;
+    const line = v.state.doc.lineAt(pos);
+    // Embeds draw as blocks only on a line of their own.
+    const before = pos > line.from && line.text.slice(0, pos - line.from).trim() ? "\n" : "";
+    const after = pos < line.to ? "\n" : "";
+    const text = before + refs.join("\n") + after;
+    v.dispatch({ changes: { from: pos, insert: text }, selection: { anchor: pos + text.length } });
+    v.focus();
+  };
+
   const insertText = (text: string, cursor = text.length) => {
     const v = editorView.current;
     if (!v) return;
@@ -368,6 +410,16 @@ export function App() {
               onChange={onChange}
               onOpenLink={(t) => openLink(t)}
               onOpenUrl={(u) => host.openExternal(u)}
+              hooks={{
+                resolveFile: (src) => {
+                  const p = ws.index.resolveFile(src, noteFolder(current));
+                  return p ? { path: p, version: ws.index.files.get(p) ?? 0 } : null;
+                },
+                resolveNote: (t) => ws.index.resolve(t),
+                noteContent: (p) => ws.index.notes.get(p)?.content ?? null,
+                openInSystem: (p) => void host.openInSystem(p).catch((e) => setNotice((e as Error).message)),
+              }}
+              onFiles={addFiles}
               onView={(v) => {
                 editorView.current = v;
                 if (v && pendingLine.current != null) gotoLine(pendingLine.current);

@@ -1,9 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 import chokidar, { FSWatcher } from "chokidar";
-import type { NoteFile, VaultEvent } from "../shared/types";
+import type { NoteFile, VaultEvent, VaultListing } from "../shared/types";
 
-const IGNORED = /(^|[\/\\])(\.(obsidian|git|trash|railnote)|node_modules)([\/\\]|$)/;
+export const IGNORED = /(^|[\/\\])(\.(obsidian|git|trash|railnote)|node_modules)([\/\\]|$)/;
 
 const toPosix = (p: string) => p.split(path.sep).join("/");
 
@@ -60,6 +60,47 @@ export class Vault {
     return walk(this.root);
   }
 
+  /** Everything that isn't a note: attachments and folders, empty ones included. */
+  async list(): Promise<VaultListing> {
+    const files: string[] = [];
+    const folders: string[] = [];
+    const walk = async (dir: string) => {
+      for (const ent of await fs.readdir(dir, { withFileTypes: true })) {
+        const abs = path.join(dir, ent.name);
+        const rel = toPosix(path.relative(this.root, abs));
+        if (IGNORED.test(rel) || ent.name.startsWith(".")) continue;
+        if (ent.isDirectory()) {
+          folders.push(rel);
+          await walk(abs);
+        } else if (!ent.name.endsWith(".md")) files.push(rel);
+      }
+    };
+    await walk(this.root);
+    return { files, folders };
+  }
+
+  /** Writes bytes to `folder/name`, adding " 1", " 2"… before the extension if the name is taken. */
+  async saveAttachment(folder: string, name: string, bytes: Uint8Array): Promise<string> {
+    const clean = name.replace(/[\\/:*?"<>|#^\[\]]/g, " ").replace(/\s+/g, " ").trim() || "file";
+    const dot = clean.lastIndexOf(".");
+    const [base, ext] = dot > 0 ? [clean.slice(0, dot), clean.slice(dot)] : [clean, ""];
+    const dir = this.resolve(folder || ".");
+    await fs.mkdir(dir, { recursive: true });
+    for (let i = 0; ; i++) {
+      const file = `${base}${i ? ` ${i}` : ""}${ext}`;
+      try {
+        await fs.writeFile(path.join(dir, file), bytes, { flag: "wx" });
+        return folder ? `${folder}/${file}` : file;
+      } catch (e: any) {
+        if (e.code !== "EEXIST") throw e;
+      }
+    }
+  }
+
+  async mkdir(rel: string) {
+    await fs.mkdir(this.resolve(rel), { recursive: true });
+  }
+
   readRaw(rel: string) {
     return fs.readFile(this.resolve(rel), "utf8");
   }
@@ -84,7 +125,7 @@ export class Vault {
   }
 
   async remove(rel: string) {
-    // Recoverable, like Obsidian's .trash: a delete is a move.
+    // Recoverable, like Obsidian's .trash: a delete is a move. Folders go whole.
     const dst = this.resolve(path.join(".trash", `${Date.now()}-${path.basename(rel)}`));
     await fs.mkdir(path.dirname(dst), { recursive: true });
     await fs.rename(this.resolve(rel), dst);
@@ -108,12 +149,26 @@ export class Vault {
         // Gone again before we could read it; the unlink event covers it.
       }
     };
-    this.watcher.on("add", upsert).on("change", upsert).on("unlink", (abs) => {
-      if (!abs.endsWith(".md")) return;
-      const rel = toPosix(path.relative(this.root, abs));
-      this.ownWrites.delete(rel);
-      emit({ type: "delete", path: rel });
-    });
+    const rel = (abs: string) => toPosix(path.relative(this.root, abs));
+    const hidden = (r: string) => r.split("/").some((part) => part.startsWith("."));
+    this.watcher
+      .on("add", (abs) => (abs.endsWith(".md") ? upsert(abs) : !hidden(rel(abs)) && emit({ type: "file", path: rel(abs), exists: true })))
+      .on("change", (abs) => (abs.endsWith(".md") ? upsert(abs) : !hidden(rel(abs)) && emit({ type: "file", path: rel(abs), exists: true })))
+      .on("unlink", (abs) => {
+        const r = rel(abs);
+        if (hidden(r)) return;
+        if (!abs.endsWith(".md")) return emit({ type: "file", path: r, exists: false });
+        this.ownWrites.delete(r);
+        emit({ type: "delete", path: r });
+      })
+      .on("addDir", (abs) => {
+        const r = rel(abs);
+        if (r && !hidden(r)) emit({ type: "folder", path: r, exists: true });
+      })
+      .on("unlinkDir", (abs) => {
+        const r = rel(abs);
+        if (r && !hidden(r)) emit({ type: "folder", path: r, exists: false });
+      });
   }
 
   async close() {
@@ -159,6 +214,7 @@ Instructions for AI agents working in this vault.
 `,
   "Inbox/.keep": () => "",
   "Notes/.keep": () => "",
+  "Attachments/.keep": () => "",
   "Templates/Daily.md": () => `# {{date}}
 
 ## Plan

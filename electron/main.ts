@@ -1,16 +1,30 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
 import { pathToFileURL } from "url";
+import { createReadStream } from "fs";
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import { Readable } from "stream";
 import type { OrganizeRequest, PluginManifest, Settings, AskSource } from "../shared/types";
-import { Vault, createStarterVault } from "./vault";
+import { IGNORED, Vault, createStarterVault } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
 
 // Vault plugins load as ES modules from railnote-plugin://<id>/<file>, served out of the open vault.
 const PLUGIN_SCHEME = "railnote-plugin";
-protocol.registerSchemesAsPrivileged([{ scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
+// Attachments (images, audio, video, PDFs) load from railnote-file://vault/<path>.
+const FILE_SCHEME = "railnote-file";
+protocol.registerSchemesAsPrivileged([
+  { scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+  { scheme: FILE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
+]);
+
+const MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", avif: "image/avif", bmp: "image/bmp",
+  mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", ogg: "audio/ogg", flac: "audio/flac", webm: "video/webm", mp4: "video/mp4", mov: "video/quicktime",
+  pdf: "application/pdf", json: "application/json", txt: "text/plain", canviz: "application/json",
+};
 const PLUGIN_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 const DEFAULTS: Settings = {
@@ -110,6 +124,58 @@ function servePlugins() {
   });
 }
 
+/** Serves vault files to the page, with byte ranges so audio and video can seek. Hidden folders stay private. */
+function serveFiles() {
+  protocol.handle(FILE_SCHEME, async (req) => {
+    if (!vault) return new Response("No vault open", { status: 404 });
+    const rel = decodeURIComponent(new URL(req.url).pathname).replace(/^\/+/, "");
+    let abs: string;
+    try {
+      abs = vault.resolve(rel);
+    } catch {
+      return new Response("Not allowed", { status: 403 });
+    }
+    if (IGNORED.test(rel) || rel.split("/").some((p) => p.startsWith("."))) return new Response("Not allowed", { status: 403 });
+    let size: number;
+    try {
+      const st = await fs.stat(abs);
+      if (!st.isFile()) throw new Error();
+      size = st.size;
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+    const type = MIME[path.extname(abs).slice(1).toLowerCase()] ?? "application/octet-stream";
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") ?? "");
+    const headers: Record<string, string> = { "content-type": type, "accept-ranges": "bytes", "access-control-allow-origin": "*" };
+    if (range && size > 0) {
+      const start = range[1] ? Number(range[1]) : Math.max(size - Number(range[2]), 0);
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+      const body = Readable.toWeb(createReadStream(abs, { start, end })) as ReadableStream;
+      return new Response(body, { status: 206, headers: { ...headers, "content-range": `bytes ${start}-${end}/${size}`, "content-length": String(end - start + 1) } });
+    }
+    return new Response(Readable.toWeb(createReadStream(abs)) as ReadableStream, { headers: { ...headers, "content-length": String(size) } });
+  });
+}
+
+/** Prints an exported page to PDF in a hidden window, after its explainers have drawn a frame. */
+async function htmlToPdf(html: string): Promise<Buffer> {
+  const tmp = path.join(os.tmpdir(), `railnote-export-${Date.now()}.html`);
+  await fs.writeFile(tmp, html, "utf8");
+  const w = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  try {
+    await w.loadFile(tmp);
+    for (let i = 0; i < 100; i++) {
+      if (await w.webContents.executeJavaScript("window.__railnoteReady === true").catch(() => true)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return await w.webContents.printToPDF({ printBackground: true, pageSize: "A4" });
+  } finally {
+    w.destroy();
+    fs.unlink(tmp).catch(() => {});
+  }
+}
+
 function registerIpc() {
   ipcMain.handle("plugins:list", () => listVaultPlugins());
   ipcMain.handle("settings:get", () => publicSettings());
@@ -136,6 +202,24 @@ function registerIpc() {
   ipcMain.handle("vault:remove", (_e, p: string) => need().remove(p));
   ipcMain.handle("vault:readRaw", (_e, p: string) => need().readRaw(p));
   ipcMain.handle("vault:findByName", (_e, name: string) => need().findByName(name));
+  ipcMain.handle("vault:readBase64", async (_e, p: string) => (await fs.readFile(need().resolve(p))).toString("base64"));
+  ipcMain.handle("vault:list", () => need().list());
+  ipcMain.handle("vault:saveAttachment", (_e, folder: string, name: string, bytes: Uint8Array) => need().saveAttachment(folder, name, bytes));
+  ipcMain.handle("vault:mkdir", (_e, p: string) => need().mkdir(p));
+  ipcMain.handle("vault:openInSystem", async (_e, p: string) => {
+    const err = await shell.openPath(need().resolve(p));
+    if (err) throw new Error(err);
+  });
+  ipcMain.handle("vault:reveal", (_e, p: string) => shell.showItemInFolder(need().resolve(p)));
+  ipcMain.handle("export:save", async (_e, name: string, kind: "html" | "pdf", html: string) => {
+    // Tests set RAILNOTE_EXPORT_DIR to skip the dialog.
+    const target = process.env.RAILNOTE_EXPORT_DIR
+      ? path.join(process.env.RAILNOTE_EXPORT_DIR, `${name}.${kind}`)
+      : (await dialog.showSaveDialog(win!, { defaultPath: path.join(app.getPath("documents"), `${name}.${kind}`), filters: [{ name: kind.toUpperCase(), extensions: [kind] }] })).filePath;
+    if (!target) return false;
+    await fs.writeFile(target, kind === "pdf" ? await htmlToPdf(html) : html);
+    return true;
+  });
   ipcMain.handle("ai:ask", (e, id: string, question: string, sources: AskSource[]) => {
     const send = (msg: object) => e.sender.send("ai:ask:event", { id, ...msg });
     // Resolve the invoke right away; the answer streams back as events.
@@ -184,6 +268,7 @@ app.whenReady().then(async () => {
   if (process.env.RAILNOTE_VAULT) settings.vaultPath = path.resolve(process.env.RAILNOTE_VAULT);
   registerIpc();
   servePlugins();
+  serveFiles();
   createWindow();
   app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });

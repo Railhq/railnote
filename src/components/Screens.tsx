@@ -63,13 +63,14 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
   const [daily, setDaily] = useState(settings.dailyFolder);
   const [inbox, setInbox] = useState(settings.inboxFolder);
   const [templates, setTemplates] = useState(settings.templatesFolder);
+  const [attachments, setAttachments] = useState(settings.attachmentsFolder ?? "Attachments");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   const save = async () => {
-    const patch: Partial<Settings> = { model: model.trim() || settings.model, dailyFolder: daily.trim(), inboxFolder: inbox.trim(), templatesFolder: templates.trim() };
+    const patch: Partial<Settings> = { model: model.trim() || settings.model, dailyFolder: daily.trim(), inboxFolder: inbox.trim(), templatesFolder: templates.trim(), attachmentsFolder: attachments.trim() };
     if (key) patch.anthropicApiKey = key.trim();
     onSaved(await host.setSettings(patch));
     onClose();
@@ -95,6 +96,7 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
         <label className="field">Inbox<input value={inbox} onChange={(e) => setInbox(e.target.value)} /></label>
         <label className="field">Daily notes<input value={daily} onChange={(e) => setDaily(e.target.value)} /></label>
         <label className="field">Templates<input value={templates} onChange={(e) => setTemplates(e.target.value)} /></label>
+        <label className="field">Pasted and dropped files<input value={attachments} placeholder="./ keeps them next to the note" onChange={(e) => setAttachments(e.target.value)} /></label>
         <PluginSettings settings={settings} plugins={plugins} onChanged={onPluginsChanged} />
         <h4>Vault</h4>
         <div className="muted small">{settings.vaultPath}</div>

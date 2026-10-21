@@ -1,5 +1,5 @@
 import MiniSearch from "minisearch";
-import type { NoteFile } from "../../shared/types";
+import type { NoteFile, VaultListing } from "../../shared/types";
 import { parse, Parsed } from "./parse";
 
 export interface Note extends NoteFile {
@@ -10,10 +10,21 @@ export interface Note extends NoteFile {
 
 export const noteName = (path: string) => path.replace(/^.*\//, "").replace(/\.md$/, "");
 export const noteFolder = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+export const fileName = (path: string) => path.replace(/^.*\//, "");
+export const extOf = (name: string) => /\.([\w-]+)$/.exec(name)?.[1].toLowerCase() ?? "";
+
+export const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"]);
+export const AUDIO_EXT = new Set(["mp3", "wav", "m4a", "ogg", "flac"]);
+export const VIDEO_EXT = new Set(["mp4", "webm", "mov"]);
+export const isMedia = (ext: string) => IMAGE_EXT.has(ext) || AUDIO_EXT.has(ext) || VIDEO_EXT.has(ext) || ext === "pdf";
 
 /** In-memory model of the vault: notes, link graph, tags, tasks and full-text search. */
 export class VaultIndex {
   notes = new Map<string, Note>();
+  /** Attachments: every file that isn't a note, with a counter bumped when one changes on disk. */
+  files = new Map<string, number>();
+  /** Folders seen on disk, so empty ones still show. */
+  dirs = new Set<string>();
   version = 0;
   private search = this.makeSearch();
   private byKey = new Map<string, string>(); // lowercase name / path / alias -> path
@@ -48,6 +59,36 @@ export class VaultIndex {
   upsert(file: NoteFile) {
     this.put(file, true);
     this.changed();
+  }
+
+  setListing(l: VaultListing) {
+    this.files = new Map(l.files.map((f) => [f, 0]));
+    this.dirs = new Set(l.folders);
+    this.changed();
+  }
+
+  setFile(path: string, exists: boolean) {
+    if (exists) this.files.set(path, (this.files.get(path) ?? -1) + 1);
+    else this.files.delete(path);
+    this.changed();
+  }
+
+  setFolder(path: string, exists: boolean) {
+    if (exists) this.dirs.add(path);
+    else for (const d of [...this.dirs]) if (d === path || d.startsWith(path + "/")) this.dirs.delete(d);
+    this.changed();
+  }
+
+  /** Resolves an attachment the way Obsidian does: the path as written, next to the note, then by file name anywhere. */
+  resolveFile(src: string, fromFolder = ""): string | null {
+    const s = src.trim().replace(/^\.\//, "");
+    if (this.files.has(s) || this.notes.has(s)) return s;
+    const near = fromFolder ? `${fromFolder}/${s}` : s;
+    if (this.files.has(near) || this.notes.has(near)) return near;
+    const want = fileName(s).toLowerCase();
+    let best: string | null = null;
+    for (const f of this.files.keys()) if (fileName(f).toLowerCase() === want && (!best || f.length < best.length)) best = f;
+    return best;
   }
 
   remove(path: string) {
@@ -86,7 +127,11 @@ export class VaultIndex {
   }
 
   folders(): string[] {
-    const set = new Set<string>();
+    const set = new Set<string>(this.dirs);
+    for (const f of this.files.keys()) {
+      const parts = noteFolder(f) ? noteFolder(f).split("/") : [];
+      for (let i = 1; i <= parts.length; i++) set.add(parts.slice(0, i).join("/"));
+    }
     for (const n of this.notes.values()) {
       const parts = n.folder ? n.folder.split("/") : [];
       for (let i = 1; i <= parts.length; i++) set.add(parts.slice(0, i).join("/"));

@@ -9,6 +9,7 @@ import { EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { blockPreview, inlinePreview, refreshPreview } from "./live-preview";
+import { editorHooks, EditorHooks } from "./hooks";
 import type { VaultIndex } from "../lib/vault-index";
 import { plugins } from "../plugins/host";
 
@@ -61,6 +62,10 @@ export interface EditorProps {
   onOpenLink(target: string, newPane: boolean): void;
   onOpenUrl(url: string): void;
   onView?(view: EditorView | null): void;
+  /** Attachment and note lookups for previews. */
+  hooks: Pick<EditorHooks, "resolveFile" | "resolveNote" | "noteContent" | "openInSystem">;
+  /** Files pasted or dropped into the note; `pos` is where their embeds go. */
+  onFiles(files: File[], pos: number): void;
 }
 
 export function Editor(props: EditorProps) {
@@ -83,12 +88,35 @@ export function Editor(props: EditorProps) {
         autocompletion({ override: [wikilinkCompletions(props.index)], icons: false }),
         keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
         placeholder("Start writing…"),
+        editorHooks.of({
+          notePath: props.path,
+          resolveFile: (src) => latest.current.hooks.resolveFile(src),
+          resolveNote: (t) => latest.current.hooks.resolveNote(t),
+          noteContent: (p) => latest.current.hooks.noteContent(p),
+          openLink: (t, n) => latest.current.onOpenLink(t, n),
+          openUrl: (u) => latest.current.onOpenUrl(u),
+          openInSystem: (p) => latest.current.hooks.openInSystem(p),
+        }),
         inlinePreview,
         blockPreview,
         EditorView.updateListener.of((u) => {
           if (u.docChanged) latest.current.onChange(u.state.doc.toString());
         }),
         EditorView.domEventHandlers({
+          paste(e, v) {
+            const files = [...(e.clipboardData?.files ?? [])];
+            if (!files.length) return false;
+            e.preventDefault();
+            latest.current.onFiles(files, v.state.selection.main.head);
+            return true;
+          },
+          drop(e, v) {
+            const files = [...(e.dataTransfer?.files ?? [])];
+            if (!files.length) return false;
+            e.preventDefault();
+            latest.current.onFiles(files, v.posAtCoords({ x: e.clientX, y: e.clientY }) ?? v.state.selection.main.head);
+            return true;
+          },
           mousedown(e, v) {
             const el = (e.target as HTMLElement).closest<HTMLElement>("[data-link], [data-href]");
             if (!el) return false;

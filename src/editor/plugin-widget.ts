@@ -1,6 +1,7 @@
 import { EditorView, WidgetType } from "@codemirror/view";
 import type { Cleanup, RenderInfo } from "../plugins/api";
 import { plugins } from "../plugins/host";
+import { editorHooks } from "./hooks";
 
 const cleanups = new WeakMap<HTMLElement, Cleanup>();
 const destroyed = new WeakSet<HTMLElement>();
@@ -66,7 +67,7 @@ export class PluginWidget extends WidgetType {
     }
     if (editFile) edit.title = `Open ${editFile}`;
     const info: RenderInfo = {
-      notePath: null,
+      notePath: view.state.facet(editorHooks).notePath || null,
       setEditFile: (src) => {
         editFile = src;
         edit.title = `Open ${src}`;
@@ -75,10 +76,7 @@ export class PluginWidget extends WidgetType {
     };
     plugins
       .app()
-      .then((app) => {
-        info.notePath = app.activeNote();
-        return owner.fn(this.source, body, info);
-      })
+      .then(() => owner.fn(this.source, body, info))
       .then((cleanup) => {
         if (!cleanup) return;
         if (destroyed.has(wrap)) cleanup();

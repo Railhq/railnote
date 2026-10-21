@@ -9,7 +9,16 @@ export interface NoteFile {
 
 export type VaultEvent =
   | { type: "upsert"; file: NoteFile }
-  | { type: "delete"; path: string };
+  | { type: "delete"; path: string }
+  /** An attachment (any file that isn't a note) appeared, changed or went away. */
+  | { type: "file"; path: string; exists: boolean }
+  | { type: "folder"; path: string; exists: boolean };
+
+export interface VaultListing {
+  /** Vault paths of every file that isn't a note. */
+  files: string[];
+  folders: string[];
+}
 
 export interface Settings {
   vaultPath?: string;
@@ -19,6 +28,8 @@ export interface Settings {
   dailyFolder: string;
   inboxFolder: string;
   templatesFolder: string;
+  /** Where pasted and dropped files go. "./" means next to the note. */
+  attachmentsFolder?: string;
   /** Plugins switched on or off by id. Built-in plugins are on unless listed false; vault plugins are off unless listed true. */
   plugins?: Record<string, boolean>;
   /** Vaults whose own plugins may run. Code in a vault you didn't write could do anything Railnote can. */
@@ -71,6 +82,18 @@ export interface HostApi {
   rename(from: string, to: string): Promise<void>;
   remove(path: string): Promise<void>;
   readRaw(path: string): Promise<string>;
+  /** Base64 contents of any vault file, for exports that inline images. */
+  readBase64(path: string): Promise<string>;
+  /** Attachments and folders; notes come from openVault. */
+  listFiles(): Promise<VaultListing>;
+  /** Saves bytes under a free name in `folder` and returns the vault path used. */
+  saveAttachment(folder: string, name: string, bytes: Uint8Array): Promise<string>;
+  mkdir(path: string): Promise<void>;
+  /** Opens a vault file in the system's default app. */
+  openInSystem(path: string): Promise<void>;
+  revealInFinder(path: string): Promise<void>;
+  /** Asks where to save, then writes `content` there. False if the user cancelled. */
+  saveExport(defaultName: string, kind: "html" | "pdf", html: string): Promise<boolean>;
   /** Vault path of the first file with this name anywhere in the vault, for ![[embeds]]. */
   findByName(name: string): Promise<string | null>;
   /** Plugins installed in the open vault's .railnote/plugins folder. */

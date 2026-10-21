@@ -2,8 +2,12 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorState, Range, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
 import { LINK_RE, parseFrontmatter } from "../lib/parse";
+import { calloutGroup, calloutTitle, section } from "../lib/render";
+import { extOf, isMedia } from "../lib/vault-index";
 import { plugins } from "../plugins/host";
+import { editorHooks } from "./hooks";
 import { PluginWidget } from "./plugin-widget";
+import { CalloutLabel, FootnoteWidget, MathWidget, MediaWidget, NoteEmbedWidget, TABLE_DELIM, TableWidget } from "./rich";
 
 // "Live preview lite": Markdown syntax hides on every line except the ones the cursor is on,
 // so notes read like a document while staying plain text underneath.
@@ -94,10 +98,19 @@ function buildInline(view: EditorView): DecorationSet {
           return false;
         }
         if (name === "Blockquote") {
+          // > [!type] Title starts a callout, Obsidian style.
+          const first = state.doc.lineAt(node.from);
+          const co = /^(\s*>\s?)\[!([\w-]+)\]([+-]?)(\s*)(.*)$/.exec(first.text);
           for (let p = node.from; p <= node.to; ) {
             const line = state.doc.lineAt(p);
-            decos.push(Decoration.line({ class: "cm-rn-quote" }).range(line.from));
+            const cls = co ? `cm-rn-callout cm-rn-co-${calloutGroup(co[2])}${line.number === first.number ? " cm-rn-callout-head" : ""}` : "cm-rn-quote";
+            decos.push(Decoration.line({ class: cls }).range(line.from));
             p = line.to + 1;
+          }
+          if (co && !active.has(first.number)) {
+            const at = first.from + co[1].length;
+            const len = co[2].length + 3 + co[3].length + co[4].length;
+            decos.push(Decoration.replace({ widget: new CalloutLabel(co[5].trim() ? "" : calloutTitle(co[2])) }).range(at, at + len));
           }
         }
         if (onActive(node.from)) return;
@@ -149,6 +162,46 @@ function buildInline(view: EditorView): DecorationSet {
       },
     });
 
+    // Footnote definitions anywhere in the note, so a marker can show its text on hover.
+    const defs = new Map<string, string>();
+    for (let n = 1; n <= state.doc.lines; n++) {
+      const d = /^\[\^([^\]\s]+)\]:\s*(.*)$/.exec(state.doc.line(n).text);
+      if (d) defs.set(d[1], d[2]);
+    }
+    const inCode = (pos: number) => {
+      for (let n: ReturnType<ReturnType<typeof syntaxTree>["resolveInner"]> | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent)
+        if (/^(InlineCode|FencedCode|CodeBlock|CodeText)$/.test(n.name)) return true;
+      return false;
+    };
+    // Highlights, inline math and footnotes aren't in the Markdown grammar either.
+    for (let pos = Math.max(from, fmEnd); pos <= to; ) {
+      const line = state.doc.lineAt(pos);
+      const live = active.has(line.number);
+      for (const m of line.text.matchAll(/==(?=\S)([^=\n]*?\S)==/g)) {
+        const a = line.from + m.index!, b = a + m[0].length;
+        if (inCode(a)) continue;
+        if (live) decos.push(Decoration.mark({ class: "cm-rn-hl" }).range(a, b));
+        else decos.push(hide.range(a, a + 2), Decoration.mark({ class: "cm-rn-hl" }).range(a + 2, b - 2), hide.range(b - 2, b));
+      }
+      if (!/^\s*\$\$/.test(line.text))
+        for (const m of line.text.matchAll(/(?<![\\$])\$(?!\s)([^$\n]+?)(?<!\s)\$(?![\d$])/g)) {
+          const a = line.from + m.index!, b = a + m[0].length;
+          if (inCode(a)) continue;
+          decos.push(live ? Decoration.mark({ class: "cm-rn-mathsrc" }).range(a, b) : Decoration.replace({ widget: new MathWidget(m[1], false) }).range(a, b));
+        }
+      const def = /^\[\^([^\]\s]+)\]:/.exec(line.text);
+      if (def) {
+        decos.push(Decoration.line({ class: "cm-rn-fn-line" }).range(line.from));
+        if (!live) decos.push(Decoration.replace({ widget: new FootnoteWidget(def[1], undefined, true) }).range(line.from, line.from + def[0].length));
+      }
+      for (const m of line.text.matchAll(/\[\^([^\]\s]+)\](?!:)/g)) {
+        const a = line.from + m.index!, b = a + m[0].length;
+        if (inCode(a)) continue;
+        decos.push(live ? Decoration.mark({ class: "cm-rn-fnsrc" }).range(a, b) : Decoration.replace({ widget: new FootnoteWidget(m[1], defs.get(m[1]), false) }).range(a, b));
+      }
+      pos = line.to + 1;
+    }
+
     // Wikilinks aren't in the Markdown grammar; find them per visible line.
     for (let pos = from; pos <= to; ) {
       const line = state.doc.lineAt(pos);
@@ -157,7 +210,9 @@ function buildInline(view: EditorView): DecorationSet {
         const end = start + m[0].length;
         const target = m[2].trim();
         if (!target || plugins.embeds.has(extOf(target))) continue;
-        const cls = `cm-rn-wikilink${resolveHook(target) ? "" : " cm-rn-unresolved"}`;
+        const ext = extOf(target);
+        const known = ext && ext !== "md" ? !!state.facet(editorHooks).resolveFile(target) : resolveHook(target);
+        const cls = `cm-rn-wikilink${known ? "" : " cm-rn-unresolved"}`;
         const attrs = { "data-link": target + (m[3] ?? "") };
         if (active.has(line.number)) {
           decos.push(Decoration.mark({ class: cls, attributes: attrs }).range(start, end));
@@ -205,35 +260,83 @@ export const inlinePreview = ViewPlugin.fromClass(
   { decorations: (v) => v.decorations },
 );
 
-const extOf = (name: string) => /\.([\w-]+)$/.exec(name)?.[1].toLowerCase() ?? "";
-
-/** ```lang fences and ![[file.ext]] embeds that a plugin claimed are drawn by it, unless the cursor is inside. */
+/**
+ * Whole-block previews, unless the cursor is inside: ```lang fences and ![[file.ext]] embeds a plugin
+ * claimed, attachments, embedded notes, tables and $$ math.
+ */
 function buildBlocks(state: EditorState): DecorationSet {
   const active = activeLines(state);
+  const hooks = state.facet(editorHooks);
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
-  for (let i = 1; i <= doc.lines; i++) {
+  const touched = (a: number, b: number) => {
+    for (let k = a; k <= b; k++) if (active.has(k)) return true;
+    return false;
+  };
+  const block = (from: number, to: number, widget: WidgetType) => builder.add(from, to, Decoration.replace({ widget, block: true }));
+  const fmEnd = parseFrontmatter(state.sliceDoc(0, Math.min(doc.length, 8000))).end;
+  for (let i = fmEnd ? doc.lineAt(fmEnd).number : 1; i <= doc.lines; i++) {
     const line = doc.line(i);
-    const fence = /^```\s*([\w-]+)\s*$/.exec(line.text);
+    if (line.from < fmEnd) continue;
+    const fence = /^(`{3,}|~{3,})\s*([\w-]*)/.exec(line.text);
     if (fence) {
+      const close = new RegExp(`^${fence[1][0]}{${fence[1].length},}\\s*$`);
       let j = i + 1;
-      while (j <= doc.lines && !/^```\s*$/.test(doc.line(j).text)) j++;
+      while (j <= doc.lines && !close.test(doc.line(j).text)) j++;
       if (j > doc.lines) break;
-      const lang = fence[1].toLowerCase();
-      if (plugins.blocks.has(lang)) {
+      const lang = fence[2].toLowerCase();
+      if (lang && plugins.blocks.has(lang) && !touched(i, j)) {
         const end = doc.line(j);
-        let touched = false;
-        for (let k = i; k <= j; k++) if (active.has(k)) touched = true;
         const source = doc.sliceString(line.to + 1, end.from).trim();
-        if (!touched) builder.add(line.from, end.to, Decoration.replace({ widget: new PluginWidget("block", lang, source, plugins.version), block: true }));
+        block(line.from, end.to, new PluginWidget("block", lang, source, plugins.version));
       }
       i = j;
       continue;
     }
-    const embed = /^\s*!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\s*$/.exec(line.text);
-    const ext = embed ? extOf(embed[1].trim()) : "";
-    if (embed && plugins.embeds.has(ext) && !active.has(i)) {
-      builder.add(line.from, line.to, Decoration.replace({ widget: new PluginWidget("embed", ext, embed[1].trim(), plugins.version), block: true }));
+    if (/^\s*\$\$/.test(line.text)) {
+      const one = /^\s*\$\$(.+)\$\$\s*$/.exec(line.text);
+      let j = i;
+      if (!one) {
+        j = i + 1;
+        while (j <= doc.lines && !/\$\$\s*$/.test(doc.line(j).text)) j++;
+        if (j > doc.lines) continue;
+      }
+      const end = doc.line(j);
+      const tex = one ? one[1] : doc.sliceString(line.from, end.to).trim().slice(2, -2);
+      if (!touched(i, j)) block(line.from, end.to, new MathWidget(tex.trim(), true));
+      i = j;
+      continue;
+    }
+    if (line.text.includes("|") && i < doc.lines && TABLE_DELIM.test(doc.line(i + 1).text) && doc.line(i + 1).text.includes("-")) {
+      let j = i + 1;
+      while (j + 1 <= doc.lines && doc.line(j + 1).text.includes("|") && doc.line(j + 1).text.trim()) j++;
+      if (!touched(i, j)) block(line.from, doc.line(j).to, new TableWidget(doc.sliceString(line.from, doc.line(j).to)));
+      i = j;
+      continue;
+    }
+    if (active.has(i)) continue;
+    const embed = /^\s*!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]\s*$/.exec(line.text);
+    if (embed) {
+      const target = embed[1].trim();
+      const ext = extOf(target);
+      if (plugins.embeds.has(ext)) block(line.from, line.to, new PluginWidget("embed", ext, target, plugins.version));
+      else if (isMedia(ext)) {
+        const hit = hooks.resolveFile(target);
+        block(line.from, line.to, new MediaWidget(target, hit?.path ?? null, hit?.version ?? 0, embed[2]?.trim() ?? "", line.from));
+      } else if (!ext || ext === "md") {
+        const [name, heading] = target.split("#");
+        const path = name ? hooks.resolveNote(name) : hooks.notePath;
+        const content = path ? hooks.noteContent(path) : null;
+        if (path && content != null && path !== hooks.notePath) block(line.from, line.to, new NoteEmbedWidget(target, path, heading ? section(content, heading) : content));
+      }
+      continue;
+    }
+    const img = /^\s*!\[([^\]]*)\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)\s*$/.exec(line.text);
+    if (img) {
+      const [alt, size = ""] = img[1].split("|");
+      const external = /^https?:/.test(img[2]);
+      const hit = external ? { path: img[2], version: 0 } : hooks.resolveFile(decodeURI(img[2]));
+      if (external || isMedia(extOf(img[2]))) block(line.from, line.to, new MediaWidget(alt || img[2], hit?.path ?? null, hit?.version ?? 0, size.trim(), line.from));
     }
   }
   return builder.finish();
