@@ -7,7 +7,7 @@ export const host: HostApi = (window as any).railnote;
 const pad = (n: number) => String(n).padStart(2, "0");
 export const isoDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-const join = (folder: string, file: string) => (folder ? `${folder}/${file}` : file);
+export const join = (folder: string, file: string) => (folder ? `${folder}/${file}` : file);
 
 /** Vault operations that touch more than one file or need the index. UI state stays in React. */
 export class Workspace {

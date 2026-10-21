@@ -12,7 +12,7 @@ import { Palette, PaletteItem } from "./components/Palette";
 import { EntryKind, MainView, Sidebar } from "./components/Sidebar";
 import { AskSheet } from "./components/AskSheet";
 import { carryPosition } from "./editor/Editor";
-import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
+import { HomeView, InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
 import { SourceView } from "./components/SourceView";
 import { NotePane, PaneHandle } from "./components/NotePane";
@@ -81,7 +81,8 @@ export function App() {
     // Tabs from last time, as long as their notes are still there.
     const saved = savedLayout(vaultRef.current);
     const restored = saved && retarget(saved, (p) => (w.index.notes.has(p) ? p : null));
-    if (restored && restored.panes[0].tabs.length) return setLayout(restored);
+    // Coming back to a vault starts at Today, with the route from last time waiting behind it.
+    if (restored && restored.panes[0].tabs.length) return (setLayout(restored), setView("home"));
     const start = w.index.notes.has("Welcome.md") ? "Welcome.md" : w.index.all().sort((a, b) => b.mtime - a.mtime)[0]?.path ?? null;
     setLayout(start ? place(emptyLayout(), start, "here") : emptyLayout());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,6 +397,7 @@ export function App() {
       <Sidebar ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
         {view !== "note" && <div className="drag-region" />}
+        {view === "home" && <HomeView ws={ws} route={layout.panes[layout.focus].tabs.filter((t) => ws.index.notes.has(t))} here={layout.panes[layout.focus].active} onDaily={daily} onOpen={(p, line) => void open(p, line)} onOrganize={organize} onView={setView} />}
         {view === "tasks" && <TasksView ws={ws} onOpen={open} />}
         {view === "graph" && <GraphView ws={ws} current={current} onOpen={(p, where) => void open(p, undefined, where)} />}
         {view === "inbox" && <InboxView ws={ws} onOpen={(p) => open(p)} onOrganize={organize} onNew={() => newNote()} />}

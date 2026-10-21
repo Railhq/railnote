@@ -3,7 +3,7 @@ import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
 
-export type MainView = "note" | "tasks" | "inbox" | "source" | "graph";
+export type MainView = "home" | "note" | "tasks" | "inbox" | "source" | "graph";
 
 export type EntryKind = "note" | "file" | "folder";
 interface Entry {
@@ -244,7 +244,7 @@ export function Sidebar(p: Props) {
       <div className="drag-region" />
       <div className="nav">
         <button className="nav-new" onClick={() => p.onNew()} title="New note in the inbox (⌘N)">New note</button>
-        <button onClick={p.onDaily} title="Today's note (⌘D)">Today</button>
+        <button className={p.view === "home" ? "on" : ""} onClick={() => p.onView("home")} title="Today: your note, the inbox, what's left to do">Today</button>
         <button className={p.view === "inbox" ? "on" : ""} onClick={() => p.onView("inbox")}>
           Inbox {inboxCount > 0 && <span className="count">{inboxCount}</span>}
         </button>

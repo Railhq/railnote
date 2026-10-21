@@ -511,3 +511,33 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .graph-legend { position: absolute; left: 20px; bottom: 16px; list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; max-width: calc(100% - 40px); background: color-mix(in srgb, var(--paper) 88%, transparent); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; color: var(--ink-2); pointer-events: none; }
 .graph-legend li { display: flex; align-items: center; gap: 6px; }
 .graph-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* Today: the day's note up top, then what's waiting, what's left and where you were. */
+.home { padding-top: 56px; }
+.home-date { margin: 0 0 22px; font-family: var(--serif); font-size: 40px; font-weight: 600; letter-spacing: -0.015em; }
+.home-today { position: relative; padding: 2px 0 4px 22px; margin-bottom: 40px; font-family: var(--serif); font-size: 16.5px; line-height: 1.6; color: var(--ink-2); }
+.home-today::before { content: ""; position: absolute; left: 4px; top: 8px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--track, var(--signal)); }
+.home-today::after { content: ""; position: absolute; left: -1px; top: 4px; width: 13px; height: 13px; border-radius: 50%; box-sizing: border-box; background: var(--signal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 28%, transparent); }
+.home-today p { margin: 0 0 4px; cursor: pointer; }
+.home-today-open { all: unset; cursor: pointer; display: block; margin-bottom: 6px; font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--ink); }
+.home-today-open:hover { color: var(--link); }
+.home-today .primary { font-family: var(--sans); }
+.home-block { margin: 0 0 34px; }
+.home-block h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); display: flex; gap: 8px; align-items: baseline; }
+.link-head { all: unset; cursor: pointer; }
+.link-head:hover { color: var(--link); }
+.link-head:focus-visible, .home-name:focus-visible, .home-today-open:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 3px; }
+.home-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.home-name { all: unset; cursor: pointer; font-family: var(--serif); font-size: 16px; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-name:hover { color: var(--link); }
+.home-row.recent { justify-content: flex-start; }
+.home-row.recent::before { content: ""; flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; border: 2.5px solid var(--track); }
+.home-row.recent .muted { margin-left: auto; font-size: 12.5px; white-space: nowrap; }
+.home-task { align-items: baseline; }
+.home-task span { flex: 1; min-width: 0; }
+.home-from { flex-shrink: 0; font-style: normal; font-family: var(--sans); font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.home-from::before { content: ""; width: 10px; height: 3px; border-radius: 2px; background: var(--track); }
+.home-route { display: flex; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; }
+.home-route .stop { all: unset; position: relative; flex: 0 1 150px; min-width: 70px; max-width: 170px; padding: 24px 10px 0 0; white-space: nowrap; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.home-route .stop.active { color: var(--ink); font-weight: 600; }
+.home-route .stop:focus-visible .tab-name { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 3px; }
