@@ -13,8 +13,15 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 | No built-in AI | **Ask** answers questions from your own notes and cites them as `[[links]]`. Search runs locally; only the best-matching passages are sent. |
 | Tasks scattered across notes | The **Tasks** view collects every `- [ ]` in the vault. Ticking one edits the file. |
 | Sharing a note means sharing the app | **Export to HTML** makes one self-contained page with pictures, fonts, diagrams and playing explainers inside it. **Export to PDF** prints the same page, explainers shown at their last frame. |
-| The graph is a hairball | **Graph** colours each note by its top-level folder, shows names when you zoom in or hover, and can narrow to the notes 1 to 3 links from the one you're on. Click a note to open it. |
+| The graph is a hairball | **Graph** draws the vault as a transit map: each top-level folder is a line, each note a station on a grid, and notes linked across folders are interchanges. Point at a station to see its links; narrow to the notes 1 to 3 links from the one you're on. **Web** switches to a free-floating layout. |
 | Lock-in, agents, open source | Plain Markdown, Obsidian syntax (wikilinks, aliases, embeds, frontmatter, `#tags`), `.obsidian/` ignored, edits made by other apps or agents appear live, MIT licensed. Renames rewrite links across the vault. Deletes go to `.trash/`. |
+
+## How it moves
+
+- **Today** is where a vault opens: today's note, what's waiting in the inbox, open tasks, the notes you were in, and the route from last time to step back onto.
+- **The route** replaces tabs. The notes you open line up as stops on a line across the top, coloured by folder, with the one you're on lit. Opening a note adds the next stop; ⌘-click adds it without leaving.
+- **The page** has one title: the note's first heading, which is also its file name. Headings show as stops in the margin, and the notes that link here are listed at the end of the note. ⌘J slides Ask up over the page.
+- **The sidebar folds** to a slim rail by default, so the page has the window. Point at the folder lines to peek at every note; ⇧⌘\\ keeps it open.
 
 ## Plugins
 
@@ -57,7 +64,8 @@ Vault plugins are off until you allow them: Settings, Plugins, **Allow plugins i
 | ⇧⌘O | Organize this note |
 | ⌘J | Ask your notes |
 | ⌘\\ | Split the view in two |
-| ⌘1…9, Ctrl+Tab | Pick or step through tabs |
+| ⇧⌘\\ | Fold or keep open the sidebar |
+| ⌘1…9, Ctrl+Tab | Pick or step through the stops on the route |
 | ⌥⌘G | Graph view |
 | ⌥⌘P | Export to PDF |
 | ⌘, | Settings |

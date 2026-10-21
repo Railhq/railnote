@@ -369,6 +369,7 @@ export function App() {
     { id: "daily", label: "Open today's note", hint: "⌘D", run: daily },
     { id: "switch", label: "Open note…", hint: "⌘K", run: () => setOverlay("switcher") },
     { id: "search", label: "Search all notes", hint: "⇧⌘F", run: () => setSearchKey((n) => n + 1) },
+    { id: "fold", label: folded ? "Keep the sidebar open" : "Fold the sidebar away", hint: "⇧⌘\\", run: () => fold(!folded) },
     { id: "inbox", label: "Show inbox", run: () => setView("inbox") },
     { id: "tasks", label: "Show all tasks", run: () => setView("tasks") },
     { id: "graph", label: "Show graph view", hint: "⌥⌘G", run: () => setView("graph") },

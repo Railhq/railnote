@@ -189,7 +189,7 @@ Plain Markdown files in a folder you own. No setup, no plugins to hunt for.
 
 ## What's built in
 - **Daily notes**: Cmd+D opens today's note in [[Daily]].
-- **Links**: type \`[[\` to link a note. Cmd+click a link to follow it. Backlinks show on the right.
+- **Links**: type \`[[\` to link a note. Cmd+click a link to follow it. Notes that link here are listed at the end of the note.
 - **Tasks**: every \`- [ ]\` in the vault shows up in the Tasks view.
 - **Search**: Cmd+K jumps to a note, Cmd+Shift+F searches every note.
 - **Inbox**: capture anything into Inbox/, then press **Organize** and Claude suggests a folder, tags and links.
