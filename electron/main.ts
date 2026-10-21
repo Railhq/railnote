@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, type MenuItemConstructorOptions } from "electron";
 import { pathToFileURL } from "url";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
@@ -239,6 +239,27 @@ function registerIpc() {
   });
 }
 
+/** The standard menus, except Cmd+W closes the note tab instead of the window. */
+function buildMenu() {
+  const send = (cmd: string) => () => win?.webContents.send("menu:command", cmd);
+  const mac = process.platform === "darwin";
+  const template: MenuItemConstructorOptions[] = [
+    ...(mac ? [{ role: "appMenu" as const }] : []),
+    {
+      label: "File",
+      submenu: [
+        { label: "Close Tab", accelerator: "CmdOrCtrl+W", click: send("close-tab") },
+        { label: "Close Window", accelerator: "CmdOrCtrl+Shift+W", role: "close" },
+        ...(mac ? [] : [{ role: "quit" as const }]),
+      ],
+    },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1280,
@@ -267,6 +288,7 @@ app.whenReady().then(async () => {
   await loadSettings();
   if (process.env.RAILNOTE_VAULT) settings.vaultPath = path.resolve(process.env.RAILNOTE_VAULT);
   registerIpc();
+  buildMenu();
   servePlugins();
   serveFiles();
   createWindow();

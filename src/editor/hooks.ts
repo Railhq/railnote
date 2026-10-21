@@ -1,5 +1,11 @@
 import { Facet } from "@codemirror/state";
 
+/** Where a followed link opens: in place, in a new tab, or in the other pane. */
+export type OpenWhere = "here" | "tab" | "split";
+/** Cmd/Ctrl+click opens a new tab, Cmd/Ctrl+Alt+click opens beside. */
+export const whereFrom = (e: { metaKey: boolean; ctrlKey: boolean; altKey: boolean }): OpenWhere =>
+  e.metaKey || e.ctrlKey ? (e.altKey ? "split" : "tab") : "here";
+
 /** What the editor's widgets may ask of the app. Each editor (pane) provides its own. */
 export interface EditorHooks {
   /** Vault path of the note this editor shows. */
@@ -9,7 +15,7 @@ export interface EditorHooks {
   /** Vault path of the note a [[link]] points to. */
   resolveNote(target: string): string | null;
   noteContent(path: string): string | null;
-  openLink(target: string, newPane: boolean): void;
+  openLink(target: string, where: OpenWhere): void;
   openUrl(url: string): void;
   /** Open a vault file in the system's default app. */
   openInSystem(path: string): void;

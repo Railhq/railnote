@@ -27,6 +27,7 @@ const api: HostApi = {
   listVaultPlugins: () => ipcRenderer.invoke("plugins:list"),
   findByName: (name) => ipcRenderer.invoke("vault:findByName", name),
   onVaultEvent: (cb) => listen("vault:event", cb),
+  onMenuCommand: (cb) => listen("menu:command", cb),
   ask: (id, q, s) => ipcRenderer.invoke("ai:ask", id, q, s),
   onAskEvent: (cb) => listen("ai:ask:event", cb),
   organize: (req) => ipcRenderer.invoke("ai:organize", req),

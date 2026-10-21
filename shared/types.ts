@@ -99,6 +99,8 @@ export interface HostApi {
   /** Plugins installed in the open vault's .railnote/plugins folder. */
   listVaultPlugins(): Promise<PluginManifest[]>;
   onVaultEvent(cb: (e: VaultEvent) => void): () => void;
+  /** Menu items the renderer acts on, such as "close-tab". */
+  onMenuCommand(cb: (cmd: string) => void): () => void;
   ask(id: string, question: string, sources: AskSource[]): Promise<void>;
   onAskEvent(cb: (e: { id: string; delta?: string; done?: boolean; error?: string }) => void): () => void;
   organize(req: OrganizeRequest): Promise<OrganizeSuggestion>;

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { EditorView } from "@codemirror/view";
 import type { NoteFile, Settings } from "../shared/types";
-import { Editor } from "./editor/Editor";
 import { setLinkResolver } from "./editor/live-preview";
+import type { OpenWhere } from "./editor/hooks";
 import { plugins } from "./plugins/host";
 import { PluginEntry, syncPlugins } from "./plugins/loader";
-import { extOf, fileName, isMedia, noteFolder } from "./lib/vault-index";
+import { extOf, noteFolder } from "./lib/vault-index";
+import { closeTab, cycle, emptyLayout, Layout, moveTab, place, retarget, unsplit } from "./lib/layout";
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
 import { EntryKind, MainView, Sidebar } from "./components/Sidebar";
@@ -13,47 +13,73 @@ import { RightPanel } from "./components/RightPanel";
 import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
 import { SourceView } from "./components/SourceView";
+import { NotePane, PaneHandle } from "./components/NotePane";
 
 type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string };
 
 const mod = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;
+const TAB_DRAG = "application/x-railnote-tab";
+const layoutKey = (vault: string) => `railnote:tabs:${vault}`;
+
+function savedLayout(vault: string): Layout | null {
+  try {
+    const l = JSON.parse(localStorage.getItem(layoutKey(vault)) ?? "null") as Layout | null;
+    return l && Array.isArray(l.panes) && l.panes.length ? l : null;
+  } catch {
+    return null;
+  }
+}
 
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ws, setWs] = useState<Workspace | null>(null);
   const [, setTick] = useState(0);
-  const [current, setCurrent] = useState<string | null>(null);
+  const [layout, setLayoutState] = useState<Layout>(emptyLayout);
   const [view, setView] = useState<MainView>("note");
   const [rightTab, setRightTab] = useState<"links" | "outline" | "ask">("links");
   const [overlay, setOverlay] = useState<Overlay>(null);
-  const [conflict, setConflict] = useState(false);
-  const [initial, setInitial] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
   const [booting, setBooting] = useState(true);
   const [searchKey, setSearchKey] = useState(0);
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [pluginList, setPluginList] = useState<PluginEntry[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
-  const insertRef = useRef<(text: string, cursor?: number) => void>(() => {});
+  const [goto, setGoto] = useState<{ pane: number; path: string; line: number; key: number } | null>(null);
+  const [dropPane, setDropPane] = useState<number | null>(null);
+  const [draggingTab, setDraggingTab] = useState(false);
 
-  // What the editor and the file agree on; anything else in the index for this path came from elsewhere.
-  const synced = useRef("");
-  const draft = useRef("");
-  const timer = useRef<number>();
-  const editorView = useRef<EditorView | null>(null);
-  const pendingLine = useRef<number | null>(null);
+  const handles = useRef<(PaneHandle | null)[]>([]);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const current = layout.panes[layout.focus]?.active ?? null;
   const currentRef = useRef(current);
   currentRef.current = current;
+  const vaultRef = useRef("");
+
+  const setLayout = (l: Layout) => {
+    layoutRef.current = l;
+    setLayoutState(l);
+    try {
+      if (vaultRef.current) localStorage.setItem(layoutKey(vaultRef.current), JSON.stringify(l));
+    } catch {
+      /* tabs just won't come back next time */
+    }
+  };
 
   const openVault = useCallback(async (files: NoteFile[]) => {
     const s = await host.getSettings();
     const w = new Workspace(s);
     w.index.load(files);
     w.index.setListing(await host.listFiles());
+    vaultRef.current = s.vaultPath ?? "";
     setSettings(s);
     setWs(w);
+    setView("note");
+    // Tabs from last time, as long as their notes are still there.
+    const saved = savedLayout(vaultRef.current);
+    const restored = saved && retarget(saved, (p) => (w.index.notes.has(p) ? p : null));
+    if (restored && restored.panes[0].tabs.length) return setLayout(restored);
     const start = w.index.notes.has("Welcome.md") ? "Welcome.md" : w.index.all().sort((a, b) => b.mtime - a.mtime)[0]?.path ?? null;
-    loadNote(w, start);
+    setLayout(start ? place(emptyLayout(), start, "here") : emptyLayout());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -72,53 +98,28 @@ export function App() {
     })();
   }, [openVault]);
 
+  /** Saves every open note's pending edits. */
   const flush = useCallback(async () => {
-    window.clearTimeout(timer.current);
-    const p = currentRef.current;
-    if (!ws || !p || draft.current === synced.current || conflict) return;
-    synced.current = draft.current;
-    await ws.write(p, draft.current);
-  }, [ws, conflict]);
+    await Promise.all(handles.current.map((h) => h?.flush()));
+  }, []);
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
-  function loadNote(w: Workspace, path: string | null, line?: number) {
-    const content = path ? w.index.notes.get(path)?.content ?? "" : "";
-    synced.current = draft.current = content;
-    setInitial(content);
-    setConflict(false);
-    setCurrent(path);
-    setView("note");
-    pendingLine.current = line ?? null;
-    if (path && path === currentRef.current) setReloadKey((k) => k + 1);
-    if (line != null) gotoLine(line);
-  }
-
-  const gotoLine = (line: number) => {
-    const v = editorView.current;
-    if (!v) return;
-    const l = v.state.doc.line(Math.min(line + 1, v.state.doc.lines));
-    v.dispatch({ selection: { anchor: l.from }, scrollIntoView: true });
-    v.focus();
-    pendingLine.current = null;
-  };
-
   const open = useCallback(
-    async (path: string, line?: number) => {
+    async (path: string, line?: number, where: OpenWhere = "here") => {
       if (!ws) return;
       await flush();
-      if (path === currentRef.current && view === "note") {
-        if (line != null) gotoLine(line);
-        return;
-      }
-      loadNote(ws, path, line);
+      const next = place(layoutRef.current, path, where);
+      setLayout(next);
+      setView("note");
+      if (line != null) setGoto({ pane: next.focus, path, line, key: Date.now() });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ws, flush, view],
+    [ws, flush],
   );
 
   const openLink = useCallback(
-    async (target: string) => {
+    async (target: string, where: OpenWhere = "here") => {
       if (!ws) return;
       const [name, heading] = target.split("#");
       // [[report.pdf]] and other attachments open in their own app, never as a new note.
@@ -130,12 +131,19 @@ export function App() {
       }
       const p = await ws.resolveOrCreate(name || ws.index.notes.get(currentRef.current ?? "")?.name || "");
       const h = heading ? ws.index.notes.get(p)?.parsed.headings.find((x) => x.text.toLowerCase() === heading.trim().toLowerCase()) : undefined;
-      open(p, h?.line);
+      open(p, h?.line, where);
     },
     [ws, open],
   );
 
-  // Keep the index in step with the disk, and notice when the open note changed underneath the editor.
+  const close = async (pane: number, path: string) => {
+    await handles.current[pane]?.flush();
+    setLayout(closeTab(layoutRef.current, pane, path));
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+
+  // Keep the index in step with the disk; open notes notice changes themselves.
   useEffect(() => {
     if (!ws) return;
     setLinkResolver((t) => !!ws.index.resolve(t.split("#")[0]));
@@ -167,34 +175,30 @@ export function App() {
         setSourcePath(p);
         setView("source");
       },
-      insertText: (t, c) => insertRef.current(t, c),
+      insertText: (t, c) => handles.current[layoutRef.current.focus]?.insertText(t, c),
       notice: (m) => setNotice(m),
     });
-    const offIndex = ws.index.subscribe(() => {
-      setTick((t) => t + 1);
-      const p = currentRef.current;
-      if (!p) return;
-      const n = ws.index.notes.get(p);
-      if (!n || n.content === synced.current) return;
-      if (draft.current === synced.current) {
-        synced.current = draft.current = n.content;
-        setInitial(n.content);
-        setReloadKey((k) => k + 1);
-      } else setConflict(true);
-    });
+    const offIndex = ws.index.subscribe(() => setTick((t) => t + 1));
     const offVault = host.onVaultEvent((e) => {
       if (e.type === "upsert") ws.index.upsert(e.file);
       else if (e.type === "file") ws.index.setFile(e.path, e.exists);
       else if (e.type === "folder") ws.index.setFolder(e.path, e.exists);
       else {
         ws.index.remove(e.path);
-        if (e.path === currentRef.current) setCurrent(null);
+        setLayout(retarget(layoutRef.current, (p) => (p === e.path ? null : p)));
       }
+    });
+    const offMenu = host.onMenuCommand((cmd) => {
+      const l = layoutRef.current;
+      const p = l.panes[l.focus]?.active;
+      if (cmd === "close-tab" && p) void closeRef.current(l.focus, p);
     });
     return () => {
       offIndex();
       offVault();
+      offMenu();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ws]);
 
   // Plugins follow the open vault: its own plugins come and go with it.
@@ -216,23 +220,10 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [notice]);
 
-  const onChange = (content: string) => {
-    draft.current = content;
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(flush, 400);
-  };
-
-  useEffect(() => {
-    const save = () => void flush();
-    window.addEventListener("beforeunload", save);
-    return () => window.removeEventListener("beforeunload", save);
-  }, [flush]);
-
   const newNote = async (folder?: string) => {
     if (!ws) return;
     await flush();
-    const p = await ws.createNote(folder ?? ws.settings.inboxFolder, "Untitled", "");
-    loadNote(ws, p);
+    open(await ws.createNote(folder ?? ws.settings.inboxFolder, "Untitled", ""));
   };
   const daily = async () => {
     if (!ws) return;
@@ -243,7 +234,6 @@ export function App() {
     if (!ws) return;
     await flush();
     await host.remove(p);
-    const cur = currentRef.current;
     if (kind === "note") ws.index.remove(p);
     else if (kind === "file") ws.index.setFile(p, false);
     else {
@@ -251,84 +241,55 @@ export function App() {
       for (const f of [...ws.index.files.keys()]) if (f.startsWith(p + "/")) ws.index.setFile(f, false);
       for (const d of [...ws.index.dirs]) if (d === p || d.startsWith(p + "/")) ws.index.setFolder(d, false);
     }
-    if (cur && (cur === p || cur.startsWith(p + "/"))) loadNote(ws, null);
+    setLayout(retarget(layoutRef.current, (x) => (x === p || x.startsWith(p + "/") ? null : x)));
   };
-  /** Sidebar renames and moves. Notes and folders keep their [[links]] working. */
+  /** Sidebar renames and moves. Notes and folders keep their [[links]] working, and open tabs follow. */
   const moveEntry = async (kind: EntryKind, from: string, to: string) => {
     if (!ws) return;
     await flush();
-    const cur = currentRef.current;
     if (kind === "note") {
       const dst = await ws.rename(from, to);
-      if (cur === from) loadNote(ws, dst);
+      setLayout(retarget(layoutRef.current, (x) => (x === from ? dst : x)));
     } else if (kind === "file") await ws.moveFile(from, to);
     else {
       const moved = await ws.moveFolder(from, to);
-      if (cur && moved.has(cur)) loadNote(ws, moved.get(cur)!);
+      setLayout(retarget(layoutRef.current, (x) => moved.get(x) ?? x));
     }
   };
   const openFile = (p: string) => void host.openInSystem(p).catch((e) => setNotice((e as Error).message));
-  const renameCurrent = async (name: string) => {
-    if (!ws || !current) return;
-    const n = ws.index.notes.get(current);
+  const renameNote = async (path: string, name: string) => {
+    if (!ws) return;
+    const n = ws.index.notes.get(path);
     if (!n || !name.trim() || name.trim() === n.name) return;
     await flush();
     try {
-      const to = await ws.rename(current, ws.uniquePath(n.folder, name.trim()));
-      loadNote(ws, to);
+      const to = await ws.rename(path, ws.uniquePath(n.folder, name.trim()));
+      setLayout(retarget(layoutRef.current, (x) => (x === path ? to : x)));
     } catch (e) {
-      alert((e as Error).message);
+      setNotice((e as Error).message);
     }
   };
   const organize = async (p: string) => {
     await flush();
     setOverlay({ organize: p });
   };
-  /** Pasted or dropped files are saved into the attachments folder and embedded where they landed. */
-  const addFiles = async (files: File[], pos: number) => {
-    if (!ws || !current) return;
-    const setting = (ws.settings.attachmentsFolder ?? "Attachments").replace(/\/+$/, "");
-    const folder = setting === "." || setting === "./" || setting.startsWith("./") ? [noteFolder(current), setting.slice(2)].filter(Boolean).join("/") : setting;
-    const d = new Date();
-    const stamp = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join("");
-    const refs: string[] = [];
-    for (const f of files) {
-      const ext = extOf(f.name) || (f.type.split("/")[1] ?? "bin");
-      // Screenshots arrive as "image.png"; name them the way Obsidian does.
-      const name = !f.name || /^image\.\w+$/.test(f.name) ? `Pasted image ${stamp}.${ext}` : f.name;
-      try {
-        const path = await host.saveAttachment(folder, name, new Uint8Array(await f.arrayBuffer()));
-        ws.index.setFile(path, true);
-        const ref = ws.index.resolveFile(fileName(path)) === path ? fileName(path) : path;
-        refs.push(isMedia(extOf(path)) ? `![[${ref}]]` : `[[${ref}]]`);
-      } catch (e) {
-        setNotice(`Couldn't save ${f.name}: ${(e as Error).message}`);
-      }
-    }
-    const v = editorView.current;
-    if (!v || !refs.length) return;
-    const line = v.state.doc.lineAt(pos);
-    // Embeds draw as blocks only on a line of their own.
-    const before = pos > line.from && line.text.slice(0, pos - line.from).trim() ? "\n" : "";
-    const after = pos < line.to ? "\n" : "";
-    const text = before + refs.join("\n") + after;
-    v.dispatch({ changes: { from: pos, insert: text }, selection: { anchor: pos + text.length } });
-    v.focus();
+  const insertText = (text: string, cursor?: number) => handles.current[layoutRef.current.focus]?.insertText(text, cursor);
+  const focusPane = (i: number) => {
+    const l = layoutRef.current;
+    if (l.focus !== i && l.panes[i]) setLayout({ ...l, focus: i });
   };
-
-  const insertText = (text: string, cursor = text.length) => {
-    const v = editorView.current;
-    if (!v) return;
-    const { from, to } = v.state.selection.main;
-    v.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + cursor } });
-    v.focus();
+  const toggleSplit = async () => {
+    await flush();
+    const l = layoutRef.current;
+    if (l.panes.length > 1) setLayout(unsplit(l));
+    else if (currentRef.current) setLayout(place(l, currentRef.current, "split"));
   };
-  insertRef.current = insertText;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!ws || !mod(e)) return;
       const k = e.key.toLowerCase();
+      const l = layoutRef.current;
       const act: Record<string, () => void> = {
         k: () => setOverlay("switcher"),
         o: () => setOverlay("switcher"),
@@ -338,9 +299,18 @@ export function App() {
         t: () => setOverlay("templates"),
         j: () => setRightTab("ask"),
         ",": () => setOverlay("settings"),
+        "\\": () => void toggleSplit(),
       };
       if (e.shiftKey && k === "o" && current) act.o = () => organize(current);
       if (e.shiftKey && k === "f") act.f = () => setSearchKey((n) => n + 1);
+      // Ctrl+Tab and Ctrl+Shift+Tab step through tabs; Cmd+1…9 picks one; Cmd+Alt+arrows switch panes.
+      if (e.ctrlKey && k === "tab") act.tab = () => setLayout(cycle(l, e.shiftKey ? -1 : 1));
+      if (/^[1-9]$/.test(k) && !e.altKey) {
+        const tabs = l.panes[l.focus].tabs;
+        const t = k === "9" ? tabs[tabs.length - 1] : tabs[Number(k) - 1];
+        if (t) act[k] = () => void open(t);
+      }
+      if (e.altKey && (k === "arrowleft" || k === "arrowright")) act[k] = () => focusPane(k === "arrowleft" ? 0 : 1);
       if (!act[k]) return;
       e.preventDefault();
       act[k]();
@@ -369,99 +339,122 @@ export function App() {
     { id: "tasks", label: "Show all tasks", run: () => setView("tasks") },
     { id: "ask", label: "Ask your notes", hint: "⌘J", run: () => setRightTab("ask") },
     ...(current ? [{ id: "org", label: "Organize this note with Claude", hint: "⇧⌘O", run: () => organize(current) }] : []),
+    { id: "split", label: layout.panes.length > 1 ? "Close split view" : "Open this note to the side", hint: "⌘\\", run: () => void toggleSplit() },
+    ...(current ? [{ id: "close-tab", label: "Close tab", hint: "⌘W", run: () => void close(layout.focus, current) }] : []),
     { id: "tpl", label: "Insert template…", hint: "⌘T", run: () => setOverlay("templates") },
     { id: "settings", label: "Settings", hint: "⌘,", run: () => setOverlay("settings") },
     ...plugins.commands,
   ];
 
+  const split = layout.panes.length > 1;
+  const dropTab = (e: React.DragEvent, pane: number, before?: string) => {
+    const raw = e.dataTransfer.getData(TAB_DRAG);
+    if (!raw) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDropPane(null);
+    const { pane: from, path } = JSON.parse(raw) as { pane: number; path: string };
+    void flush().then(() => setLayout(moveTab(layoutRef.current, from, path, pane, before)));
+  };
+  const acceptTab = (e: React.DragEvent, pane: number) => {
+    if (!e.dataTransfer.types.includes(TAB_DRAG)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dropPane !== pane) setDropPane(pane);
+  };
+
   return (
     <div className="app">
-      <Sidebar ws={ws} current={current} view={view} onOpen={(p) => open(p)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
+      <Sidebar ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
-        <div className="drag-region" />
+        {view !== "note" && <div className="drag-region" />}
         {view === "tasks" && <TasksView ws={ws} onOpen={open} />}
-        {view === "inbox" && <InboxView ws={ws} onOpen={(p) => open(p)} onOrganize={organize} onNew={newNote} />}
-        {view === "note" && note && current && (
-          <>
-            <div className="note-head">
-              <span className="crumb">{note.folder}</span>
-              <input
-                key={current}
-                className="title"
-                defaultValue={note.name}
-                onBlur={(e) => renameCurrent(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                  if (e.key === "Escape") {
-                    (e.target as HTMLInputElement).value = note.name;
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-              />
-              <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => organize(current)}>Organize</button>
-            </div>
-            {conflict && (
-              <div className="banner">
-                This note was changed outside Railnote while you were editing.
-                <button
-                  onClick={() => {
-                    const disk = ws.index.notes.get(current)?.content ?? "";
-                    synced.current = draft.current = disk;
-                    setInitial(disk);
-                    setReloadKey((k) => k + 1);
-                    setConflict(false);
-                  }}
-                >
-                  Load theirs
-                </button>
-                <button
-                  onClick={async () => {
-                    setConflict(false);
-                    synced.current = draft.current;
-                    await ws.write(current, draft.current);
-                  }}
-                >
-                  Keep mine
-                </button>
-              </div>
+        {view === "inbox" && <InboxView ws={ws} onOpen={(p) => open(p)} onOrganize={organize} onNew={() => newNote()} />}
+        {view === "note" && (
+          <div className={`panes${split ? " split" : ""}`}>
+            {layout.panes.map((pn, i) => {
+              const shown = pn.active && ws.index.notes.has(pn.active) ? pn.active : null;
+              return (
+                <section key={i} className={`pane${split && i === layout.focus ? " focused" : ""}${dropPane === i ? " drop" : ""}`} onDragOver={(e) => acceptTab(e, i)} onDragLeave={() => setDropPane(null)} onDrop={(e) => dropTab(e, i)}>
+                  <div className="tabbar" role="tablist">
+                    {pn.tabs.map((t) => (
+                      <div
+                        key={t}
+                        role="tab"
+                        aria-selected={t === pn.active}
+                        className={`tab${t === pn.active ? " active" : ""}`}
+                        title={t}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(TAB_DRAG, JSON.stringify({ pane: i, path: t }));
+                          setDraggingTab(true);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingTab(false);
+                          setDropPane(null);
+                        }}
+                        onDrop={(e) => dropTab(e, i, t)}
+                        onClick={() => {
+                          focusPane(i);
+                          if (t !== pn.active) void flush().then(() => setLayout({ ...place({ ...layoutRef.current, focus: i }, t, "here") }));
+                        }}
+                        onAuxClick={(e) => e.button === 1 && void close(i, t)}
+                      >
+                        <span className="tab-name">{ws.index.notes.get(t)?.name ?? t.replace(/^.*\//, "").replace(/\.md$/, "")}</span>
+                        <button
+                          className="tab-x"
+                          aria-label={`Close ${t}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void close(i, t);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {!split && i === 0 && current && (
+                      <button className="tab-split" title="Open this note to the side (⌘\)" aria-label="Split view" onClick={() => void toggleSplit()}>
+                        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" /><path d="M8 2.5v11" stroke="currentColor" /></svg>
+                      </button>
+                    )}
+                  </div>
+                  {shown ? (
+                    <NotePane
+                      key={shown}
+                      ref={(h) => (handles.current[i] = h)}
+                      ws={ws}
+                      path={shown}
+                      goto={goto && goto.pane === i && goto.path === shown ? goto : undefined}
+                      focused={i === layout.focus}
+                      onFocus={() => focusPane(i)}
+                      onOpenLink={(t, where) => {
+                        focusPane(i);
+                        void openLink(t, where);
+                      }}
+                      onOrganize={organize}
+                      onRename={renameNote}
+                      onNotice={setNotice}
+                    />
+                  ) : (
+                    <div className="empty-main">
+                      <p>No note open.</p>
+                      <button onClick={() => newNote()}>New note</button> <button onClick={daily}>Today's note</button>
+                      <p className="muted small">Press ⌘K to jump to any note, or ⌘P for every command.</p>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+            {/* Dragging a tab to the right edge opens it to the side. */}
+            {!split && draggingTab && layout.panes[0].tabs.length > 1 && (
+              <div className={`split-target${dropPane === 1 ? " drop" : ""}`} onDragOver={(e) => acceptTab(e, 1)} onDragLeave={() => setDropPane(null)} onDrop={(e) => dropTab(e, 1)} aria-hidden="true" />
             )}
-            <Editor
-              path={current}
-              initial={initial}
-              reloadKey={reloadKey}
-              index={ws.index}
-              onChange={onChange}
-              onOpenLink={(t) => openLink(t)}
-              onOpenUrl={(u) => host.openExternal(u)}
-              hooks={{
-                resolveFile: (src) => {
-                  const p = ws.index.resolveFile(src, noteFolder(current));
-                  return p ? { path: p, version: ws.index.files.get(p) ?? 0 } : null;
-                },
-                resolveNote: (t) => ws.index.resolve(t),
-                noteContent: (p) => ws.index.notes.get(p)?.content ?? null,
-                openInSystem: (p) => void host.openInSystem(p).catch((e) => setNotice((e as Error).message)),
-              }}
-              onFiles={addFiles}
-              onView={(v) => {
-                editorView.current = v;
-                if (v && pendingLine.current != null) gotoLine(pendingLine.current);
-              }}
-            />
-          </>
-        )}
-        {view === "source" && sourcePath && (
-          <SourceView key={sourcePath} path={sourcePath} backLabel={note?.name ?? "note"} onBack={() => loadNote(ws, currentRef.current)} />
-        )}
-        {view === "note" && !note && (
-          <div className="empty-main">
-            <p>No note open.</p>
-            <button onClick={() => newNote()}>New note</button> <button onClick={daily}>Today's note</button>
-            <p className="muted small">Press ⌘K to jump to any note, or ⌘P for every command.</p>
           </div>
         )}
+        {view === "source" && sourcePath && <SourceView key={sourcePath} path={sourcePath} backLabel={note?.name ?? "note"} onBack={() => setView("note")} />}
       </main>
-      <RightPanel ws={ws} current={view === "note" ? current : null} tab={rightTab} onTab={setRightTab} onOpen={open} onOpenLink={openLink} />
+      <RightPanel ws={ws} current={view === "note" ? current : null} tab={rightTab} onTab={setRightTab} onOpen={open} onOpenLink={(t) => openLink(t)} />
 
       {overlay === "switcher" && <Palette placeholder="Jump to a note, or type a new name" items={switcherItems} onClose={() => setOverlay(null)} />}
       {overlay === "commands" && (
@@ -508,8 +501,9 @@ export function App() {
           path={overlay.organize}
           onClose={() => setOverlay(null)}
           onDone={(p) => {
+            const from = overlay.organize;
             setOverlay(null);
-            if (view === "note") loadNote(ws, p);
+            setLayout(retarget(layoutRef.current, (x) => (x === from ? p : x)));
           }}
         />
       )}

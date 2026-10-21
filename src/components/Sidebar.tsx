@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
+import { whereFrom, type OpenWhere } from "../editor/hooks";
 
 export type MainView = "note" | "tasks" | "inbox" | "source";
 
@@ -14,7 +15,7 @@ interface Props {
   ws: Workspace;
   current: string | null;
   view: MainView;
-  onOpen(path: string, newPane?: boolean): void;
+  onOpen(path: string, where?: OpenWhere): void;
   onView(v: MainView): void;
   onNew(folder?: string): void;
   onDaily(): void;
@@ -188,7 +189,7 @@ export function Sidebar(p: Props) {
           key={it.path}
           className={`tree-note${it.kind === "file" ? " file" : ""}${active ? " active" : ""}${i === sorted.length - 1 ? " last" : ""}`}
           style={{ "--x": `${stopX(depth)}px`, "--track": line } as React.CSSProperties}
-          onClick={(ev) => (it.kind === "note" ? p.onOpen(it.path, ev.metaKey || ev.ctrlKey) : p.onOpenFile(it.path))}
+          onClick={(ev) => (it.kind === "note" ? p.onOpen(it.path, whereFrom(ev)) : p.onOpenFile(it.path))}
           onContextMenu={(ev) => openMenu(ev, e)}
           title={it.path}
           {...dragProps(e)}
@@ -234,7 +235,7 @@ export function Sidebar(p: Props) {
       }],
     ];
     if (e.kind === "folder") return [["New note here", () => p.onNew(e.path)], ["New folder here", () => void newFolder(e.path)], ...common];
-    if (e.kind === "note") return [["Open in other pane", () => p.onOpen(e.path, true)], ...common];
+    if (e.kind === "note") return [["Open in new tab", () => p.onOpen(e.path, "tab")], ["Open to the side", () => p.onOpen(e.path, "split")], ...common];
     return [["Open", () => p.onOpenFile(e.path)], ...common];
   };
 

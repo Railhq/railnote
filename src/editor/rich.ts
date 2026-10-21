@@ -1,5 +1,5 @@
 import { EditorView, WidgetType } from "@codemirror/view";
-import { editorHooks, fileUrl } from "./hooks";
+import { editorHooks, fileUrl, whereFrom } from "./hooks";
 import { esc, renderMath, renderNote } from "../lib/render";
 import { AUDIO_EXT, IMAGE_EXT, VIDEO_EXT, extOf, noteFolder } from "../lib/vault-index";
 
@@ -13,7 +13,7 @@ function followLinks(view: EditorView, e: MouseEvent): boolean {
   e.preventDefault();
   e.stopPropagation();
   const hooks = view.state.facet(editorHooks);
-  if (el.dataset.link) hooks.openLink(el.dataset.link, e.metaKey || e.ctrlKey);
+  if (el.dataset.link) hooks.openLink(el.dataset.link, whereFrom(e));
   else if (el.dataset.href) hooks.openUrl(el.dataset.href);
   return true;
 }

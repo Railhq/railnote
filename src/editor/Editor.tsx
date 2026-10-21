@@ -9,7 +9,7 @@ import { EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { blockPreview, inlinePreview, refreshPreview } from "./live-preview";
-import { editorHooks, EditorHooks } from "./hooks";
+import { editorHooks, EditorHooks, OpenWhere, whereFrom } from "./hooks";
 import type { VaultIndex } from "../lib/vault-index";
 import { plugins } from "../plugins/host";
 
@@ -59,14 +59,19 @@ export interface EditorProps {
   reloadKey: number;
   index: VaultIndex;
   onChange(content: string): void;
-  onOpenLink(target: string, newPane: boolean): void;
+  onOpenLink(target: string, where: OpenWhere): void;
   onOpenUrl(url: string): void;
   onView?(view: EditorView | null): void;
   /** Attachment and note lookups for previews. */
   hooks: Pick<EditorHooks, "resolveFile" | "resolveNote" | "noteContent" | "openInSystem">;
   /** Files pasted or dropped into the note; `pos` is where their embeds go. */
   onFiles(files: File[], pos: number): void;
+  /** Off for a pane that opens without being the one in use. */
+  autoFocus?: boolean;
 }
+
+// Where each note's cursor and scroll were, so switching tabs comes back to the same spot.
+const memory = new Map<string, { anchor: number; head: number; top: number }>();
 
 export function Editor(props: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -125,7 +130,7 @@ export function Editor(props: EditorProps) {
             // Rendered links follow on click; while editing the line, Cmd/Ctrl+click follows.
             if (onCursorLine && !(e.metaKey || e.ctrlKey)) return false;
             e.preventDefault();
-            if (el.dataset.link) latest.current.onOpenLink(el.dataset.link, e.metaKey || e.ctrlKey);
+            if (el.dataset.link) latest.current.onOpenLink(el.dataset.link, whereFrom(e));
             else if (el.dataset.href) latest.current.onOpenUrl(el.dataset.href);
             return true;
           },
@@ -134,9 +139,17 @@ export function Editor(props: EditorProps) {
     });
     const v = new EditorView({ state, parent: host.current! });
     view.current = v;
+    const was = memory.get(props.path);
+    if (was) {
+      const len = v.state.doc.length;
+      v.dispatch({ selection: { anchor: Math.min(was.anchor, len), head: Math.min(was.head, len) } });
+      requestAnimationFrame(() => (v.scrollDOM.scrollTop = was.top));
+    }
     props.onView?.(v);
-    v.focus();
+    if (props.autoFocus !== false) v.focus();
     return () => {
+      const sel = v.state.selection.main;
+      memory.set(props.path, { anchor: sel.anchor, head: sel.head, top: v.scrollDOM.scrollTop });
       props.onView?.(null);
       v.destroy();
       view.current = null;
