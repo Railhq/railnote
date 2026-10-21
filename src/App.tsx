@@ -9,7 +9,8 @@ import { closeTab, cycle, emptyLayout, Layout, moveTab, place, retarget, unsplit
 import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
 import { EntryKind, MainView, Sidebar } from "./components/Sidebar";
-import { RightPanel } from "./components/RightPanel";
+import { AskSheet } from "./components/AskSheet";
+import { carryPosition } from "./editor/Editor";
 import { InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
 import { SourceView } from "./components/SourceView";
@@ -38,7 +39,7 @@ export function App() {
   const [, setTick] = useState(0);
   const [layout, setLayoutState] = useState<Layout>(emptyLayout);
   const [view, setView] = useState<MainView>("note");
-  const [rightTab, setRightTab] = useState<"links" | "outline" | "ask">("links");
+  const [asking, setAsking] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [booting, setBooting] = useState(true);
   const [searchKey, setSearchKey] = useState(0);
@@ -278,7 +279,9 @@ export function App() {
     if (!n || !name.trim() || name.trim() === n.name) return;
     await flush();
     try {
-      const to = await ws.rename(path, ws.uniquePath(n.folder, name.trim()));
+      const to = ws.uniquePath(n.folder, name.trim());
+      carryPosition(path, to);
+      await ws.rename(path, to);
       setLayout(retarget(layoutRef.current, (x) => (x === path ? to : x)));
     } catch (e) {
       setNotice((e as Error).message);
@@ -312,7 +315,7 @@ export function App() {
         n: () => newNote(),
         d: daily,
         t: () => setOverlay("templates"),
-        j: () => setRightTab("ask"),
+        j: () => setAsking((a) => !a),
         ",": () => setOverlay("settings"),
         "\\": () => void toggleSplit(),
       };
@@ -360,7 +363,7 @@ export function App() {
     { id: "inbox", label: "Show inbox", run: () => setView("inbox") },
     { id: "tasks", label: "Show all tasks", run: () => setView("tasks") },
     { id: "graph", label: "Show graph view", hint: "⌥⌘G", run: () => setView("graph") },
-    { id: "ask", label: "Ask your notes", hint: "⌘J", run: () => setRightTab("ask") },
+    { id: "ask", label: "Ask your notes", hint: "⌘J", run: () => setAsking(true) },
     ...(current ? [{ id: "org", label: "Organize this note with Claude", hint: "⇧⌘O", run: () => organize(current) }] : []),
     { id: "split", label: layout.panes.length > 1 ? "Close split view" : "Open this note to the side", hint: "⌘\\", run: () => void toggleSplit() },
     ...(current ? [{ id: "close-tab", label: "Close tab", hint: "⌘W", run: () => void close(layout.focus, current) }] : []),
@@ -456,6 +459,10 @@ export function App() {
                         focusPane(i);
                         void openLink(t, where);
                       }}
+                      onOpen={(path, where) => {
+                        focusPane(i);
+                        void open(path, undefined, where);
+                      }}
                       onOrganize={organize}
                       onRename={renameNote}
                       onNotice={setNotice}
@@ -477,8 +484,8 @@ export function App() {
           </div>
         )}
         {view === "source" && sourcePath && <SourceView key={sourcePath} path={sourcePath} backLabel={note?.name ?? "note"} onBack={() => setView("note")} />}
+        <AskSheet ws={ws} open={asking} onClose={() => setAsking(false)} onOpen={(p) => void open(p)} onOpenLink={(t) => void openLink(t)} />
       </main>
-      <RightPanel ws={ws} current={view === "note" ? current : null} tab={rightTab} onTab={setRightTab} onOpen={open} onOpenLink={(t) => openLink(t)} />
 
       {overlay === "switcher" && <Palette placeholder="Jump to a note, or type a new name" items={switcherItems} onClose={() => setOverlay(null)} />}
       {overlay === "commands" && (

@@ -2,7 +2,8 @@
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function inline(s: string): string {
+/** One line of Markdown as HTML: emphasis, code, [[links]] and web links. */
+export function renderInline(s: string): string {
   return esc(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -18,7 +19,7 @@ export function renderMarkdown(src: string): string {
   let list: "ul" | "ol" | null = null;
   let para: string[] = [];
   const flushPara = () => {
-    if (para.length) out.push(`<p>${para.map(inline).join("<br>")}</p>`);
+    if (para.length) out.push(`<p>${para.map(renderInline).join("<br>")}</p>`);
     para = [];
   };
   const closeList = () => {
@@ -41,7 +42,7 @@ export function renderMarkdown(src: string): string {
     if (h) {
       flushPara();
       closeList();
-      out.push(`<h${h[1].length + 2}>${inline(h[2])}</h${h[1].length + 2}>`);
+      out.push(`<h${h[1].length + 2}>${renderInline(h[2])}</h${h[1].length + 2}>`);
     } else if (ul || ol) {
       flushPara();
       const kind = ul ? "ul" : "ol";
@@ -50,7 +51,7 @@ export function renderMarkdown(src: string): string {
         out.push(`<${kind}>`);
         list = kind;
       }
-      out.push(`<li>${inline((ul ?? ol)![1])}</li>`);
+      out.push(`<li>${renderInline((ul ?? ol)![1])}</li>`);
     } else if (!line.trim()) {
       flushPara();
       closeList();

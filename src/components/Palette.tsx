@@ -12,12 +12,14 @@ export function Palette(props: { placeholder: string; items: (query: string) => 
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
   const items = useMemo(() => props.items(query), [query, props]);
+  // The list redraws under a resting pointer, which can point past its end until the reset below runs.
+  const at = Math.max(0, Math.min(sel, items.length - 1));
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => setSel(0), [query]);
   useEffect(() => {
-    list.current?.children[sel]?.scrollIntoView({ block: "nearest" });
-  }, [sel]);
+    list.current?.children[at]?.scrollIntoView({ block: "nearest" });
+  }, [at]);
 
   const choose = (i: number) => {
     const item = items[i];
@@ -35,9 +37,9 @@ export function Palette(props: { placeholder: string; items: (query: string) => 
           placeholder={props.placeholder}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "ArrowDown") setSel((s) => Math.min(s + 1, items.length - 1));
-            else if (e.key === "ArrowUp") setSel((s) => Math.max(s - 1, 0));
-            else if (e.key === "Enter") choose(sel);
+            if (e.key === "ArrowDown") setSel(Math.min(at + 1, items.length - 1));
+            else if (e.key === "ArrowUp") setSel(Math.max(at - 1, 0));
+            else if (e.key === "Enter") choose(at);
             else if (e.key === "Escape") props.onClose();
             else return;
             e.preventDefault();
@@ -45,7 +47,7 @@ export function Palette(props: { placeholder: string; items: (query: string) => 
         />
         <div className="palette-list" ref={list}>
           {items.map((it, i) => (
-            <div key={it.id} className={`palette-item${i === sel ? " sel" : ""}`} onMouseEnter={() => setSel(i)} onClick={() => choose(i)}>
+            <div key={it.id} className={`palette-item${i === at ? " sel" : ""}`} onMouseMove={() => i !== at && setSel(i)} onClick={() => choose(i)}>
               <span>{it.label}</span>
               {it.hint && <span className="hint">{it.hint}</span>}
             </div>

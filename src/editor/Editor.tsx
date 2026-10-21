@@ -5,8 +5,8 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { EditorState } from "@codemirror/state";
-import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
+import { EditorState, StateField } from "@codemirror/state";
+import { Decoration, DecorationSet, drawSelection, EditorView, keymap, placeholder, WidgetType } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { blockPreview, inlinePreview, refreshPreview } from "./live-preview";
 import { editorHooks, EditorHooks, OpenWhere, whereFrom } from "./hooks";
@@ -52,6 +52,43 @@ function wikilinkCompletions(index: VaultIndex) {
   };
 }
 
+/** A fixed element drawn after the last line, part of the page: the note's connections live here. */
+class FooterWidget extends WidgetType {
+  constructor(readonly el: HTMLElement) { super(); }
+  eq(o: FooterWidget) { return o.el === this.el; }
+  toDOM() { return this.el; }
+  ignoreEvent() { return true; }
+}
+function footerField(el: HTMLElement) {
+  const deco = (len: number) => Decoration.set([Decoration.widget({ widget: new FooterWidget(el), side: 1, block: true }).range(len)]);
+  return StateField.define<DecorationSet>({
+    create: (st) => deco(st.doc.length),
+    update: (d, tr) => (tr.docChanged ? deco(tr.state.doc.length) : d),
+    provide: (f) => EditorView.decorations.from(f),
+  });
+}
+
+/** The line number (1-based) of the `# heading` that opens the note, which is drawn as its title. */
+export function titleLine(doc: EditorState["doc"]): number {
+  let n = 1;
+  if (doc.lines > 1 && doc.line(1).text.trim() === "---") {
+    for (n = 2; n <= Math.min(doc.lines, 400) && doc.line(n).text.trim() !== "---"; n++);
+    n++;
+  }
+  while (n <= doc.lines && !doc.line(n).text.trim()) n++;
+  return n <= doc.lines && /^#\s+\S/.test(doc.line(n).text) ? n : 0;
+}
+const titleDeco = Decoration.line({ class: "cm-rn-title" });
+const titleField = StateField.define<DecorationSet>({
+  create: (st) => titleDecos(st.doc),
+  update: (d, tr) => (tr.docChanged ? titleDecos(tr.state.doc) : d),
+  provide: (f) => EditorView.decorations.from(f),
+});
+function titleDecos(doc: EditorState["doc"]): DecorationSet {
+  const n = titleLine(doc);
+  return n ? Decoration.set([titleDeco.range(doc.line(n).from)]) : Decoration.none;
+}
+
 export interface EditorProps {
   path: string;
   initial: string;
@@ -68,10 +105,19 @@ export interface EditorProps {
   onFiles(files: File[], pos: number): void;
   /** Off for a pane that opens without being the one in use. */
   autoFocus?: boolean;
+  /** Shown below the last line, scrolling with the note. */
+  footer?: HTMLElement;
+  /** The cursor's line (0-based) when it moves to another line, and -1 when the editor loses focus. */
+  onCursorLine?(line: number): void;
 }
 
 // Where each note's cursor and scroll were, so switching tabs comes back to the same spot.
 const memory = new Map<string, { anchor: number; head: number; top: number }>();
+const moved = new Map<string, string>();
+/** A renamed note keeps its cursor and scroll position: the editor closing on `from` remembers them for `to`. */
+export function carryPosition(from: string, to: string) {
+  moved.set(from, to);
+}
 
 export function Editor(props: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -80,6 +126,7 @@ export function Editor(props: EditorProps) {
   latest.current = props;
 
   useEffect(() => {
+    let lastLine = -1;
     const state = EditorState.create({
       doc: props.initial,
       extensions: [
@@ -106,7 +153,14 @@ export function Editor(props: EditorProps) {
         blockPreview,
         EditorView.updateListener.of((u) => {
           if (u.docChanged) latest.current.onChange(u.state.doc.toString());
+          if (u.selectionSet || u.docChanged) {
+            const line = u.state.doc.lineAt(u.state.selection.main.head).number - 1;
+            if (line !== lastLine) latest.current.onCursorLine?.((lastLine = line));
+          }
+          if (u.focusChanged && !u.view.hasFocus) latest.current.onCursorLine?.((lastLine = -1));
         }),
+        titleField,
+        ...(props.footer ? [footerField(props.footer)] : []),
         EditorView.domEventHandlers({
           paste(e, v) {
             const files = [...(e.clipboardData?.files ?? [])];
@@ -124,7 +178,7 @@ export function Editor(props: EditorProps) {
           },
           mousedown(e, v) {
             const el = (e.target as HTMLElement).closest<HTMLElement>("[data-link], [data-href]");
-            if (!el) return false;
+            if (!el || el.closest(".rn-connections")) return false;
             const pos = v.posAtDOM(el);
             const onCursorLine = v.state.selection.ranges.some((r) => v.state.doc.lineAt(r.head).number === v.state.doc.lineAt(pos).number);
             // Rendered links follow on click; while editing the line, Cmd/Ctrl+click follows.
@@ -146,10 +200,13 @@ export function Editor(props: EditorProps) {
       requestAnimationFrame(() => (v.scrollDOM.scrollTop = was.top));
     }
     props.onView?.(v);
-    if (props.autoFocus !== false) v.focus();
+    // A note that finishes loading after the switcher or Ask opened mustn't take the keyboard from them.
+    const busy = document.activeElement?.closest("input, textarea, .overlay, .ask-sheet");
+    if (props.autoFocus !== false && !busy) v.focus();
     return () => {
       const sel = v.state.selection.main;
-      memory.set(props.path, { anchor: sel.anchor, head: sel.head, top: v.scrollDOM.scrollTop });
+      memory.set(moved.get(props.path) ?? props.path, { anchor: sel.anchor, head: sel.head, top: v.scrollDOM.scrollTop });
+      moved.delete(props.path);
       props.onView?.(null);
       v.destroy();
       view.current = null;

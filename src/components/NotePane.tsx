@@ -1,8 +1,14 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { EditorView } from "@codemirror/view";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { EditorView } from "@codemirror/view";
 import { Editor } from "../editor/Editor";
 import type { OpenWhere } from "../editor/hooks";
+import { folderLines, lineColour } from "../lib/lines";
+import { parseFrontmatter } from "../lib/parse";
+import { leadingTitle } from "../lib/title";
 import { extOf, fileName, isMedia, noteFolder } from "../lib/vault-index";
+import { Connections } from "./Connections";
+import { OutlineRail } from "./OutlineRail";
 import { host, type Workspace } from "../workspace";
 
 /** What the app asks of an open note: save it now, jump to a line, type into it. */
@@ -20,12 +26,16 @@ interface Props {
   focused: boolean;
   onFocus(): void;
   onOpenLink(target: string, where: OpenWhere): void;
+  onOpen(path: string, where: OpenWhere): void;
   onOrganize(path: string): void;
   onRename(from: string, name: string): void;
   onNotice(message: string): void;
 }
 
-/** One note being edited: its title, the conflict banner, and the editor, saving as you type. */
+/**
+ * One note being edited, saving as you type. The note's opening `# heading` is its title: when that
+ * heading was the file's name, editing it renames the file once the cursor leaves the line.
+ */
 export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) {
   const { ws, path } = p;
   const note = ws.index.notes.get(path);
@@ -37,6 +47,13 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
   const draft = useRef(initial);
   const timer = useRef<number>();
   const view = useRef<EditorView | null>(null);
+  const [editor, setEditor] = useState<EditorView | null>(null);
+  const [title, setTitle] = useState(() => leadingTitle(initial));
+  // Only a heading that named the file renames it; "# Welcome to Railnote" in Welcome.md stays a heading.
+  const renames = useRef(leadingTitle(initial)?.text === note?.name);
+  const cursorLine = useRef(-1);
+  const footer = useMemo(() => document.createElement("div"), []);
+  const [version, setVersion] = useState(ws.index.version);
   const pendingLine = useRef<number | null>(p.goto?.line ?? null);
   const conflictRef = useRef(conflict);
   conflictRef.current = conflict;
@@ -54,7 +71,8 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
     const v = view.current;
     if (!v) return void (pendingLine.current = line);
     const l = v.state.doc.line(Math.min(line + 1, v.state.doc.lines));
-    v.dispatch({ selection: { anchor: l.from }, scrollIntoView: true });
+    // The line goes near the top, where reading continues from it.
+    v.dispatch({ selection: { anchor: l.from }, effects: EditorView.scrollIntoView(l.from, { y: "start", yMargin: 48 }) });
     v.focus();
     pendingLine.current = null;
   };
@@ -69,6 +87,28 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
 
   useImperativeHandle(ref, () => ({ flush: () => flushRef.current(), gotoLine, insertText }));
 
+  /** Renames the file after its title, if the title is the file's name and has changed. */
+  const commitTitle = () => {
+    const n = ws.index.notes.get(path);
+    const t = leadingTitle(draft.current);
+    if (renames.current && n && t && t.text !== n.name) p.onRename(path, t.text);
+  };
+  const commitRef = useRef(commitTitle);
+  commitRef.current = commitTitle;
+
+  /** For a note with no heading: puts the name typed in the title field at the top, and renames to it. */
+  const addTitle = (text: string) => {
+    const v = view.current;
+    const name = text.trim();
+    // Enter adds it and moves on, and the blur that follows mustn't add it again.
+    if (!v || !name || leadingTitle(v.state.doc.toString())) return;
+    const at = parseFrontmatter(v.state.doc.toString()).end;
+    const rest = v.state.doc.sliceString(at, at + 1);
+    v.dispatch({ changes: { from: at, insert: `# ${name}\n${rest === "\n" ? "" : "\n"}` } });
+    renames.current = true;
+    if (name !== note?.name) p.onRename(path, name);
+  };
+
   useEffect(() => {
     if (p.goto) gotoLine(p.goto.line);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,6 +120,7 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
     window.addEventListener("beforeunload", save);
     return () => {
       window.removeEventListener("beforeunload", save);
+      if (cursorLine.current === leadingTitle(draft.current)?.line) commitRef.current();
       save();
     };
   }, []);
@@ -88,6 +129,7 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
   useEffect(
     () =>
       ws.index.subscribe(() => {
+        setVersion(ws.index.version);
         const n = ws.index.notes.get(path);
         if (!n || n.content === synced.current) return;
         if (draft.current === synced.current) {
@@ -130,27 +172,50 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
     v.focus();
   };
 
+  const lines = useMemo(() => folderLines(ws.index), [version]);
   if (!note) return null;
+  const track = lineColour(lines, path);
+  const headings = note.parsed.headings.filter((h) => h.line !== title?.line);
 
   return (
-    <div className={`pane-note${p.focused ? " focused" : ""}`} onFocusCapture={p.onFocus} onMouseDown={p.onFocus}>
+    <div
+      className={`pane-note${p.focused ? " focused" : ""}`}
+      data-title={title?.text ?? note.name}
+      data-path={path}
+      style={{ "--track": track } as React.CSSProperties}
+      onFocusCapture={p.onFocus}
+      onMouseDown={p.onFocus}
+    >
       <div className="note-head">
-        <span className="crumb">{note.folder}</span>
+        <span className="crumb" title={path}>
+          <i className="crumb-line" />
+          {note.folder || "Vault"}
+          {title && title.text !== note.name && <span className="crumb-file">{note.name}.md</span>}
+        </span>
+        <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => p.onOrganize(path)}>Organize</button>
+      </div>
+      {!title && (
         <input
           key={path}
-          className="title"
+          className="title title-add"
           defaultValue={note.name}
-          onBlur={(e) => p.onRename(path, e.target.value)}
+          aria-label="Title"
+          title="Give this note a title. It goes at the top as a heading and names the file."
+          onBlur={(e) => e.target.value.trim() !== note.name && addTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            const el = e.target as HTMLInputElement;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addTitle(el.value);
+              view.current?.focus();
+            }
             if (e.key === "Escape") {
-              (e.target as HTMLInputElement).value = note.name;
-              (e.target as HTMLInputElement).blur();
+              el.value = note.name;
+              el.blur();
             }
           }}
         />
-        <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => p.onOrganize(path)}>Organize</button>
-      </div>
+      )}
       {conflict && (
         <div className="banner">
           This note was changed outside Railnote while you were editing.
@@ -184,6 +249,8 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
         autoFocus={p.focused}
         onChange={(content) => {
           draft.current = content;
+          const t = leadingTitle(content);
+          setTitle((was) => (was?.text === t?.text && was?.line === t?.line ? was : t));
           window.clearTimeout(timer.current);
           timer.current = window.setTimeout(() => void flushRef.current(), 400);
         }}
@@ -199,11 +266,20 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
           openInSystem: (f) => void host.openInSystem(f).catch((e) => p.onNotice((e as Error).message)),
         }}
         onFiles={addFiles}
+        footer={footer}
+        onCursorLine={(line) => {
+          const was = cursorLine.current;
+          cursorLine.current = line;
+          if (was !== line && was === leadingTitle(draft.current)?.line) commitRef.current();
+        }}
         onView={(v) => {
           view.current = v;
+          setEditor(v);
           if (v && pendingLine.current != null) gotoLine(pendingLine.current);
         }}
       />
+      <OutlineRail view={editor} headings={headings} track={track} onJump={gotoLine} />
+      {createPortal(<Connections ws={ws} path={path} version={version} onOpen={p.onOpen} onOpenLink={p.onOpenLink} />, footer)}
     </div>
   );
 });
