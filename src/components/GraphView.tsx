@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
-import { buildGraph, settle, tick, type Graph, type GraphNode } from "../lib/graph";
+import { buildGraph, octilinear, settle, tick, transitMap, type Graph, type GraphNode, type TransitMap } from "../lib/graph";
 import type { Workspace } from "../workspace";
 
 interface Props {
@@ -10,13 +10,15 @@ interface Props {
 }
 
 type Mode = "vault" | "note";
+/** A transit map on a grid, or the free-floating web the force layout settles into. */
+type Style = "map" | "web";
 const SAVED = "railnote:graph";
 
 interface View { x: number; y: number; k: number }
 
 const radius = (n: GraphNode) => 3.5 + Math.sqrt(n.degree) * 1.7;
 
-/** Every note as a stop and every link as a track, laid out by force. Click a stop to open it. */
+/** Every note as a station, each folder a line through its notes. Click a station to open it. */
 export function GraphView({ ws, current, onOpen }: Props) {
   const saved = (() => {
     try { return JSON.parse(localStorage.getItem(SAVED) ?? "{}"); } catch { return {}; }
@@ -24,6 +26,10 @@ export function GraphView({ ws, current, onOpen }: Props) {
   const [mode, setMode] = useState<Mode>(saved.mode === "note" && current ? "note" : "vault");
   const [depth, setDepth] = useState<number>(saved.depth ?? 1);
   const [orphans, setOrphans] = useState<boolean>(saved.orphans ?? false);
+  const [look, setLook] = useState<Style>(saved.style === "web" ? "web" : "map");
+  const lookRef = useRef(look);
+  lookRef.current = look;
+  const map = useRef<TransitMap>({ lines: [], interchanges: new Set() });
   const [counts, setCounts] = useState({ nodes: 0, edges: 0 });
   const [groups, setGroups] = useState<string[]>([]);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -39,11 +45,13 @@ export function GraphView({ ws, current, onOpen }: Props) {
   const around = mode === "note" ? current : null;
 
   useEffect(() => {
-    try { localStorage.setItem(SAVED, JSON.stringify({ mode, depth, orphans })); } catch { /* per-viewer nicety only */ }
-  }, [mode, depth, orphans]);
+    try { localStorage.setItem(SAVED, JSON.stringify({ mode, depth, orphans, style: look })); } catch { /* per-viewer nicety only */ }
+  }, [mode, depth, orphans, look]);
 
   // Starts the layout running again, cooling as it goes, and draws each frame until it's still.
   const heat = (to = 0.6) => {
+    // The map doesn't drift: it's placed once and stays where it was put.
+    if (lookRef.current === "map") return draw.current();
     alpha.current = Math.max(alpha.current, to);
     if (raf.current) return;
     const step = () => {
@@ -55,11 +63,14 @@ export function GraphView({ ws, current, onOpen }: Props) {
     raf.current = requestAnimationFrame(step);
   };
 
+  /** Where a note is drawn: its grid point on the map, or wherever the force layout has it. */
+  const at = (n: GraphNode): [number, number] => (lookRef.current === "map" && n.mx != null ? [n.mx, n.my!] : [n.x, n.y]);
+
   const fit = () => {
     const c = canvas.current, ns = graph.current.nodes;
     if (!c || !ns.length) return;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const n of ns) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); }
+    for (const n of ns) { const [nx, ny] = at(n); x0 = Math.min(x0, nx); y0 = Math.min(y0, ny); x1 = Math.max(x1, nx); y1 = Math.max(y1, ny); }
     const w = c.clientWidth, h = c.clientHeight, pad = 70;
     const k = Math.min(2.2, (w - pad * 2) / Math.max(x1 - x0, 1), (h - pad * 2) / Math.max(y1 - y0, 1));
     view.current = { k, x: w / 2 - ((x0 + x1) / 2) * k, y: h / 2 - ((y0 + y1) / 2) * k };
@@ -77,11 +88,16 @@ export function GraphView({ ws, current, onOpen }: Props) {
       setGroups(g.groups);
       if (first) {
         settle(g, 240);
+        map.current = transitMap(g);
         if (fitNext.current) fit();
         fitNext.current = false;
         heat(0.15);
-      } else if (fresh) heat(0.4);
-      else draw.current();
+      } else {
+        if (fresh && lookRef.current === "map") settle(g, 80);
+        map.current = transitMap(g);
+        if (fresh) heat(0.4);
+        else draw.current();
+      }
     };
     fitNext.current = true;
     rebuild(true);
@@ -113,6 +129,7 @@ export function GraphView({ ws, current, onOpen }: Props) {
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      if (lookRef.current === "map") return drawMap();
 
       ctx.lineWidth = 1;
       for (const [i, j] of edges) {
@@ -157,9 +174,109 @@ export function GraphView({ ws, current, onOpen }: Props) {
       ctx.globalAlpha = 1;
     };
 
+    const drawMap = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const { nodes, edges, groups: gs } = graph.current;
+      const { x: ox, y: oy, k } = view.current;
+      const colour = (g: string) => (g ? v(`--line-${(gs.indexOf(g) % 4) + 1}`) : v("--line-0"));
+      const kk = Math.min(Math.max(k, 0.55), 1.6);
+      const sx = (n: GraphNode) => ox + n.mx! * k, sy = (n: GraphNode) => oy + n.my! * k;
+      const hot = hover.current;
+      const near = new Set<GraphNode>();
+      if (hot) {
+        near.add(hot);
+        for (const [i, j] of edges) {
+          if (nodes[i] === hot) near.add(nodes[j]);
+          if (nodes[j] === hot) near.add(nodes[i]);
+        }
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const dim = (n: GraphNode) => (hot && !near.has(n) ? 0.3 : 1);
+
+      // Links between folders are transfer passages, drawn faintly; every link of the station
+      // being pointed at shows in full.
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 4]);
+      for (const [i, j] of edges) {
+        const a = nodes[i], b = nodes[j];
+        const lit = hot && (a === hot || b === hot);
+        if (!lit && a.group === b.group) continue;
+        ctx.globalAlpha = lit ? 1 : hot ? 0.15 : 0.9;
+        ctx.strokeStyle = lit ? v("--ink-2") : v("--graph-edge");
+        ctx.beginPath();
+        ctx.moveTo(sx(a), sy(a));
+        ctx.lineTo(sx(b), sy(b));
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+
+      // The lines, with rounded bends where a track turns between stations.
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 6 * kk;
+      for (const line of map.current.lines) {
+        ctx.strokeStyle = colour(line.group);
+        ctx.globalAlpha = hot && !line.stops.some((i) => near.has(nodes[i])) ? 0.3 : 1;
+        ctx.beginPath();
+        const first = nodes[line.stops[0]];
+        ctx.moveTo(sx(first), sy(first));
+        for (let s = 1; s < line.stops.length; s++) {
+          const a = nodes[line.stops[s - 1]], b = nodes[line.stops[s]];
+          const bends = octilinear(sx(a), sy(a), sx(b), sy(b));
+          for (const [bx, by] of bends) ctx.arcTo(bx, by, sx(b), sy(b), Math.min(16 * kk, Math.hypot(bx - sx(a), by - sy(a)), Math.hypot(sx(b) - bx, sy(b) - by)));
+          ctx.lineTo(sx(b), sy(b));
+        }
+        ctx.stroke();
+      }
+
+      nodes.forEach((n, i) => {
+        const swap = map.current.interchanges.has(i);
+        const r = (swap ? 7 : 5) * kk;
+        ctx.globalAlpha = dim(n);
+        ctx.beginPath();
+        ctx.arc(sx(n), sy(n), r, 0, Math.PI * 2);
+        if (n.id === current) {
+          ctx.fillStyle = v("--signal");
+          ctx.fill();
+          ctx.lineWidth = 4 * kk;
+          ctx.strokeStyle = `color-mix(in srgb, ${v("--signal")} 30%, transparent)`;
+          ctx.beginPath();
+          ctx.arc(sx(n), sy(n), r + 3 * kk, 0, Math.PI * 2);
+          ctx.stroke();
+          return;
+        }
+        ctx.fillStyle = v("--paper");
+        ctx.fill();
+        ctx.lineWidth = (n === hot ? 3.5 : 2.5) * kk;
+        ctx.strokeStyle = swap ? v("--ink") : colour(n.group);
+        ctx.stroke();
+      });
+
+      // Names sit beside their stations, as on a printed map.
+      ctx.font = `600 ${Math.round(11 + kk)}px ${v("--sans")}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      for (const n of nodes) {
+        if (!(k >= 0.9 || near.has(n) || n.id === current || nodes.length <= 40)) continue;
+        const x = sx(n) + 10 * kk, y = sy(n) - 9 * kk;
+        ctx.globalAlpha = dim(n);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = v("--paper");
+        ctx.strokeText(n.name, x, y);
+        ctx.fillStyle = n === hot || n.id === current ? v("--ink") : v("--ink-2");
+        ctx.fillText(n.name, x, y);
+      }
+      ctx.globalAlpha = 1;
+    };
+
     // Screen positions, for tests to click on.
     (c as unknown as { railnoteNodes: () => unknown }).railnoteNodes = () =>
-      graph.current.nodes.map((n) => ({ id: n.id, x: view.current.x + n.x * view.current.k, y: view.current.y + n.y * view.current.k }));
+      graph.current.nodes.map((n) => { const [nx, ny] = at(n); return { id: n.id, x: view.current.x + nx * view.current.k, y: view.current.y + ny * view.current.k, mx: n.mx, my: n.my }; });
+    (c as unknown as { railnoteLines: () => unknown }).railnoteLines = () => ({
+      lines: map.current.lines.map((l) => ({ group: l.group, stops: l.stops.map((i) => graph.current.nodes[i].id) })),
+      interchanges: [...map.current.interchanges].map((i) => graph.current.nodes[i].id),
+    });
 
     const ro = new ResizeObserver(() => draw.current());
     ro.observe(c);
@@ -183,8 +300,10 @@ export function GraphView({ ws, current, onOpen }: Props) {
     const { x, y, k } = view.current;
     let best: GraphNode | null = null, bestD = Infinity;
     for (const n of graph.current.nodes) {
-      const d = Math.hypot(x + n.x * k - px, y + n.y * k - py);
-      if (d < Math.max(radius(n) * Math.max(k, 0.6) + 5, 9) && d < bestD) { best = n; bestD = d; }
+      const [nx, ny] = at(n);
+      const d = Math.hypot(x + nx * k - px, y + ny * k - py);
+      const reach = lookRef.current === "map" ? 7 * Math.min(Math.max(k, 0.55), 1.6) + 6 : radius(n) * Math.max(k, 0.6) + 5;
+      if (d < Math.max(reach, 9) && d < bestD) { best = n; bestD = d; }
     }
     return best;
   };
@@ -202,9 +321,17 @@ export function GraphView({ ws, current, onOpen }: Props) {
       if (node) {
         const r = c.getBoundingClientRect();
         node.fixed = true;
-        node.x = (ev.clientX - r.left - view.current.x) / view.current.k;
-        node.y = (ev.clientY - r.top - view.current.y) / view.current.k;
-        heat(0.3);
+        const wx = (ev.clientX - r.left - view.current.x) / view.current.k;
+        const wy = (ev.clientY - r.top - view.current.y) / view.current.k;
+        if (lookRef.current === "map") {
+          node.mx = wx;
+          node.my = wy;
+          draw.current();
+        } else {
+          node.x = wx;
+          node.y = wy;
+          heat(0.3);
+        }
       } else {
         view.current.x = start.vx + ev.clientX - start.x;
         view.current.y = start.vy + ev.clientY - start.y;
@@ -215,6 +342,14 @@ export function GraphView({ ws, current, onOpen }: Props) {
       c.removeEventListener("pointermove", move);
       c.removeEventListener("pointerup", up);
       if (node) node.fixed = false;
+      // A station dropped on the map settles onto the nearest free grid point.
+      if (node && moved && lookRef.current === "map") {
+        node.x = node.mx!;
+        node.y = node.my!;
+        node.mx = node.my = undefined;
+        map.current = transitMap(graph.current);
+        draw.current();
+      }
       if (node && !moved) openRef.current(node.id, whereFrom(ev as unknown as MouseEvent));
     };
     c.addEventListener("pointermove", move);
@@ -257,6 +392,12 @@ export function GraphView({ ws, current, onOpen }: Props) {
     draw.current();
   };
 
+  useEffect(() => {
+    fit();
+    if (look === "web") heat(0.2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [look]);
+
   const empty = counts.nodes === 0;
   const name = current ? ws.index.notes.get(current)?.name : null;
 
@@ -281,6 +422,10 @@ export function GraphView({ ws, current, onOpen }: Props) {
             <input type="checkbox" checked={orphans} onChange={(e) => setOrphans(e.target.checked)} /> Notes without links
           </label>
         )}
+        <div className="seg" role="group" aria-label="How to draw it">
+          <button className={look === "map" ? "on" : ""} onClick={() => setLook("map")} title="Each folder a line, each note a station">Map</button>
+          <button className={look === "web" ? "on" : ""} onClick={() => setLook("web")} title="Notes float free, pulled together by their links">Web</button>
+        </div>
         <span className="graph-count">{counts.nodes} notes, {counts.edges} links</span>
         <span className="graph-zoom">
           <button className="ghost" onClick={() => zoomBy(1 / 1.3)} aria-label="Zoom out">−</button>

@@ -14,7 +14,24 @@ export interface GraphNode {
   vy: number;
   /** Held in place while dragged. */
   fixed?: boolean;
+  /** Where the note sits on the transit map: a grid point near its force position. */
+  mx?: number;
+  my?: number;
 }
+
+export interface TransitLine {
+  group: string;
+  /** Node indexes in the order the line runs through them. */
+  stops: number[];
+}
+
+export interface TransitMap {
+  lines: TransitLine[];
+  /** Notes linked to notes in another folder: where you'd change lines. */
+  interchanges: Set<number>;
+}
+
+export const GRID = 48;
 
 export interface Graph {
   nodes: GraphNode[];
@@ -77,6 +94,8 @@ export function buildGraph(index: VaultIndex, q: GraphQuery = {}, previous?: Gra
       y: o?.y ?? Math.sin(a) * r,
       vx: 0,
       vy: 0,
+      mx: o?.mx,
+      my: o?.my,
     };
   });
   const at = new Map(nodes.map((n, i) => [n.id, i]));
@@ -136,4 +155,99 @@ export function tick(g: Graph, alpha: number): number {
 /** Settles a graph without drawing, for tests and for a first frame that isn't a tangle. */
 export function settle(g: Graph, steps = 300) {
   for (let k = 0; k < steps; k++) tick(g, 1 - k / steps);
+}
+
+/**
+ * Lays the graph out as a transit map: each note snaps to the nearest free grid point by its force
+ * position (notes already placed stay put), and each folder becomes a line running through its notes
+ * nearest-first.
+ */
+export function transitMap(g: Graph, grid = GRID): TransitMap {
+  const { nodes, edges } = g;
+  const taken = new Set<string>();
+  const key = (cx: number, cy: number) => `${cx},${cy}`;
+  for (const n of nodes) if (n.mx != null && n.my != null) taken.add(key(Math.round(n.mx / grid), Math.round(n.my / grid)));
+  // Each folder's notes are drawn toward their middle first, so lines cross each other less.
+  const mid = new Map<string, [number, number, number]>();
+  for (const n of nodes) { const m = mid.get(n.group) ?? [0, 0, 0]; mid.set(n.group, [m[0] + n.x, m[1] + n.y, m[2] + 1]); }
+  const target = (n: GraphNode): [number, number] => {
+    const [sx, sy, c] = mid.get(n.group)!;
+    return [n.x + (sx / c - n.x) * 0.4, n.y + (sy / c - n.y) * 0.4];
+  };
+  const order = nodes.map((_, i) => i).filter((i) => nodes[i].mx == null).sort((a, b) => nodes[b].degree - nodes[a].degree);
+  for (const i of order) {
+    const n = nodes[i];
+    const [tx, ty] = target(n);
+    const cx = Math.round(tx / grid), cy = Math.round(ty / grid);
+    // The nearest free point, searching outward ring by ring.
+    let best: [number, number] | null = null;
+    for (let r = 0; !best; r++) {
+      let bestD = Infinity;
+      for (let dx = -r; dx <= r; dx++)
+        for (let dy = -r; dy <= r; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || taken.has(key(cx + dx, cy + dy))) continue;
+          const d = Math.hypot((cx + dx) * grid - tx, (cy + dy) * grid - ty);
+          if (d < bestD) (bestD = d), (best = [cx + dx, cy + dy]);
+        }
+    }
+    taken.add(key(best[0], best[1]));
+    n.mx = best[0] * grid;
+    n.my = best[1] * grid;
+  }
+
+  const byGroup = new Map<string, number[]>();
+  nodes.forEach((n, i) => byGroup.set(n.group, [...(byGroup.get(n.group) ?? []), i]));
+  const lines: TransitLine[] = [];
+  for (const [group, members] of byGroup) {
+    if (members.length < 2) continue;
+    // Start from the end of the line: the stop furthest from the others' middle.
+    const mx = members.reduce((t, i) => t + nodes[i].mx!, 0) / members.length;
+    const my = members.reduce((t, i) => t + nodes[i].my!, 0) / members.length;
+    let at = members.reduce((a, b) => (Math.hypot(nodes[b].mx! - mx, nodes[b].my! - my) > Math.hypot(nodes[a].mx! - mx, nodes[a].my! - my) ? b : a));
+    const left = new Set(members);
+    const stops = [at];
+    left.delete(at);
+    while (left.size) {
+      let next = -1, nd = Infinity;
+      for (const j of left) {
+        const d = Math.hypot(nodes[j].mx! - nodes[at].mx!, nodes[j].my! - nodes[at].my!);
+        if (d < nd) (nd = d), (next = j);
+      }
+      stops.push(next);
+      left.delete(next);
+      at = next;
+    }
+    lines.push({ group, stops: untangle(stops, (i) => [nodes[i].mx!, nodes[i].my!]) });
+  }
+
+  const interchanges = new Set<number>();
+  for (const [i, j] of edges) if (nodes[i].group !== nodes[j].group) (interchanges.add(i), interchanges.add(j));
+  return { lines, interchanges };
+}
+
+/**
+ * The corner points of a track from a to b that runs only straight or at 45 degrees: along the
+ * longer axis first, then diagonally into b.
+ */
+export function octilinear(ax: number, ay: number, bx: number, by: number): [number, number][] {
+  const dx = bx - ax, dy = by - ay;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (!adx || !ady || adx === ady) return [];
+  return adx > ady ? [[ax + Math.sign(dx) * (adx - ady), ay]] : [[ax, ay + Math.sign(dy) * (ady - adx)]];
+}
+
+/** Shortens a line by reversing any stretch that makes it longer (2-opt), which also undoes self-crossings. */
+function untangle(stops: number[], at: (i: number) => [number, number]): number[] {
+  const d = (a: number, b: number) => { const [ax, ay] = at(a), [bx, by] = at(b); return Math.hypot(ax - bx, ay - by); };
+  const s = [...stops];
+  for (let pass = 0, better = true; better && pass < 20; pass++) {
+    better = false;
+    for (let i = 0; i < s.length - 2; i++)
+      for (let j = i + 2; j < s.length; j++) {
+        const after = j + 1 < s.length ? d(s[i], s[j]) + d(s[i + 1], s[j + 1]) : d(s[i], s[j]);
+        const before = j + 1 < s.length ? d(s[i], s[i + 1]) + d(s[j], s[j + 1]) : d(s[i], s[i + 1]);
+        if (after < before - 1e-6) (s.splice(i + 1, j - i, ...s.slice(i + 1, j + 1).reverse()), (better = true));
+      }
+  }
+  return s;
 }
