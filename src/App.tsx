@@ -11,6 +11,7 @@ import { host, Workspace } from "./workspace";
 import { Palette, PaletteItem } from "./components/Palette";
 import { EntryKind, MainView, Sidebar } from "./components/Sidebar";
 import { AskSheet } from "./components/AskSheet";
+import { HistorySheet } from "./components/HistorySheet";
 import { carryPosition } from "./editor/Editor";
 import { HomeView, InboxView, OrganizeDialog, TasksView } from "./components/Views";
 import { SettingsDialog, Welcome } from "./components/Screens";
@@ -19,7 +20,7 @@ import { NotePane, PaneHandle } from "./components/NotePane";
 import { GraphView } from "./components/GraphView";
 import { exportNote, type ExportKind } from "./export/export";
 
-type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string };
+type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string } | { history: string };
 
 const mod = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;
 const TAB_DRAG = "application/x-railnote-tab";
@@ -214,6 +215,7 @@ export function App() {
       const l = layoutRef.current;
       const p = l.panes[l.focus]?.active;
       if (cmd === "close-tab" && p) void closeRef.current(l.focus, p);
+      if (cmd === "history" && p) void showHistoryRef.current(p);
       if ((cmd === "export-html" || cmd === "export-pdf") && p) void exportRef.current(p, cmd === "export-html" ? "html" : "pdf");
     });
     return () => {
@@ -298,6 +300,13 @@ export function App() {
     await flush();
     setOverlay({ organize: p });
   };
+  // Pending edits are saved first, so the newest version is what's on the page.
+  const showHistory = async (p: string) => {
+    await flush();
+    setOverlay({ history: p });
+  };
+  const showHistoryRef = useRef(showHistory);
+  showHistoryRef.current = showHistory;
   const insertText = (text: string, cursor?: number) => handles.current[layoutRef.current.focus]?.insertText(text, cursor);
   const focusPane = (i: number) => {
     const l = layoutRef.current;
@@ -374,6 +383,7 @@ export function App() {
     { id: "tasks", label: "Show all tasks", run: () => setView("tasks") },
     { id: "graph", label: "Show graph view", hint: "⌥⌘G", run: () => setView("graph") },
     { id: "ask", label: "Ask your notes", hint: "⌘J", run: () => setAsking(true) },
+    ...(current ? [{ id: "history", label: "Show version history", hint: "⇧⌘H", run: () => void showHistory(current) }] : []),
     ...(current ? [{ id: "org", label: "Organize this note with Claude", hint: "⇧⌘O", run: () => organize(current) }] : []),
     { id: "split", label: layout.panes.length > 1 ? "Close split view" : "Open this note to the side", hint: "⌘\\", run: () => void toggleSplit() },
     ...(current ? [{ id: "close-tab", label: "Close tab", hint: "⌘W", run: () => void close(layout.focus, current) }] : []),
@@ -486,6 +496,7 @@ export function App() {
                         void open(path, undefined, where);
                       }}
                       onOrganize={organize}
+                      onHistory={(path) => void showHistory(path)}
                       onRename={renameNote}
                       onNotice={setNotice}
                     />
@@ -548,7 +559,20 @@ export function App() {
           }}
         />
       )}
-      {overlay && typeof overlay === "object" && (
+      {overlay && typeof overlay === "object" && "history" in overlay && (
+        <HistorySheet
+          ws={ws}
+          path={overlay.history}
+          onClose={() => setOverlay(null)}
+          onNotice={setNotice}
+          onRestored={(text, v) => {
+            ws.index.upsert({ path: overlay.history, content: text, mtime: Date.now() });
+            setOverlay(null);
+            setNotice(`Restored the version from ${new Date(v.time).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}. The text it replaced is in the history too.`);
+          }}
+        />
+      )}
+      {overlay && typeof overlay === "object" && "organize" in overlay && (
         <OrganizeDialog
           ws={ws}
           path={overlay.organize}

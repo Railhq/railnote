@@ -28,6 +28,7 @@ interface Props {
   onOpenLink(target: string, where: OpenWhere): void;
   onOpen(path: string, where: OpenWhere): void;
   onOrganize(path: string): void;
+  onHistory(path: string): void;
   onRename(from: string, name: string): void;
   onNotice(message: string): void;
 }
@@ -192,7 +193,10 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
           {note.folder || "Vault"}
           {title && title.text !== note.name && <span className="crumb-file">{note.name}.md</span>}
         </span>
-        <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => p.onOrganize(path)}>Organize</button>
+        <span className="note-actions">
+          <button className="ghost" title="Saved versions of this note (⇧⌘H)" onClick={() => p.onHistory(path)}>History</button>
+          <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => p.onOrganize(path)}>Organize</button>
+        </span>
       </div>
       {!title && (
         <input

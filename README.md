@@ -21,6 +21,7 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 - **Today** is where a vault opens: today's note, what's waiting in the inbox, open tasks, the notes you were in, and the route from last time to step back onto.
 - **The route** replaces tabs. The notes you open line up as stops on a line across the top, coloured by folder, with the one you're on lit. Opening a note adds the next stop; ⌘-click adds it without leaving.
 - **The page** has one title: the note's first heading, which is also its file name. Headings show as stops in the margin, and the notes that link here are listed at the end of the note. ⌘J slides Ask up over the page.
+- **History** keeps every note's saved versions in the vault, in `.railnote/history`: your edits, edits an agent or another app made, and the text before Railnote first touched it. They show as stops on a line, each compared with the note now, and any of them can be put back (⇧⌘H). Older versions thin out to one an hour, then one a day, then one a week.
 - **The sidebar folds** to a slim rail by default, so the page has the window. Point at the folder lines to peek at every note; ⇧⌘\\ keeps it open.
 
 ## Plugins
@@ -68,6 +69,7 @@ Vault plugins are off until you allow them: Settings, Plugins, **Allow plugins i
 | ⌘T | Insert template |
 | ⇧⌘F | Search all notes |
 | ⇧⌘O | Organize this note |
+| ⇧⌘H | Version history of this note |
 | ⌘J | Ask your notes |
 | ⌘\\ | Split the view in two |
 | ⇧⌘\\ | Fold or keep open the sidebar |

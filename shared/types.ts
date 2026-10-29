@@ -71,6 +71,19 @@ export interface PluginManifest {
   error?: string;
 }
 
+/** Where a saved version came from. */
+export type VersionSource = "original" | "app" | "outside" | "before-restore" | "restored" | "deleted";
+
+/** One saved version of a note, kept in the vault's .railnote/history. */
+export interface NoteVersion {
+  id: string;
+  time: number;
+  source: VersionSource;
+  /** Lines added and removed against the version before it. */
+  added: number;
+  removed: number;
+}
+
 /** Everything the renderer may ask of the host. A web or sync build implements the same interface. */
 export interface HostApi {
   getSettings(): Promise<Settings>;
@@ -102,6 +115,11 @@ export interface HostApi {
   findByName(name: string): Promise<string | null>;
   /** Plugins installed in the open vault's .railnote/plugins folder. */
   listVaultPlugins(): Promise<PluginManifest[]>;
+  /** Saved versions of a note, newest first. */
+  history(path: string): Promise<NoteVersion[]>;
+  readVersion(path: string, id: string): Promise<string>;
+  /** Puts a version back as the note's text, keeping the text it replaces as a version; returns the text. */
+  restoreVersion(path: string, id: string): Promise<string>;
   onVaultEvent(cb: (e: VaultEvent) => void): () => void;
   /** Menu items the renderer acts on, such as "close-tab". */
   onMenuCommand(cb: (cmd: string) => void): () => void;

@@ -204,6 +204,9 @@ function registerIpc() {
   ipcMain.handle("vault:write", (_e, p: string, c: string) => need().write(p, c));
   ipcMain.handle("vault:rename", (_e, a: string, b: string) => need().rename(a, b));
   ipcMain.handle("vault:remove", (_e, p: string) => need().remove(p));
+  ipcMain.handle("history:list", (_e, p: string) => need().history.list(p));
+  ipcMain.handle("history:read", (_e, p: string, id: string) => need().history.read(p, id));
+  ipcMain.handle("history:restore", (_e, p: string, id: string) => need().restore(p, id));
   ipcMain.handle("vault:readRaw", (_e, p: string) => need().readRaw(p));
   ipcMain.handle("vault:findByName", (_e, name: string) => need().findByName(name));
   ipcMain.handle("vault:readBase64", async (_e, p: string) => (await fs.readFile(need().resolve(p))).toString("base64"));
@@ -259,6 +262,8 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
+        { label: "Version History…", accelerator: "CmdOrCtrl+Shift+H", click: send("history") },
+        { type: "separator" },
         { label: "Export to HTML…", click: send("export-html") },
         { label: "Export to PDF…", accelerator: "CmdOrCtrl+Alt+P", click: send("export-pdf") },
         { type: "separator" },

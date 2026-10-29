@@ -1,7 +1,8 @@
 import fs, { constants } from "fs/promises";
 import path from "path";
 import chokidar, { FSWatcher } from "chokidar";
-import type { NoteFile, VaultEvent, VaultListing } from "../shared/types";
+import type { NoteFile, VaultEvent, VaultListing, VersionSource } from "../shared/types";
+import { History } from "./history";
 
 export const IGNORED = /(^|[\/\\])(\.(obsidian|git|trash|railnote|claude)|node_modules)([\/\\]|$)/;
 
@@ -13,7 +14,16 @@ export class Vault {
   // Content we just wrote, so the watcher doesn't echo our own saves back as external edits.
   private ownWrites = new Map<string, string>();
 
-  constructor(readonly root: string) {}
+  readonly history: History;
+
+  constructor(readonly root: string) {
+    this.history = new History(root);
+  }
+
+  /** History is a convenience: a failure there must never fail the save or move it rides on. */
+  private keep(what: string, p: Promise<unknown>) {
+    return p.catch((e) => console.error(`history: ${what}:`, e));
+  }
 
   resolve(rel: string): string {
     const abs = path.resolve(this.root, rel);
@@ -105,11 +115,26 @@ export class Vault {
     return fs.readFile(this.resolve(rel), "utf8");
   }
 
-  async write(rel: string, content: string) {
+  async write(rel: string, content: string, source: VersionSource = "app") {
     const abs = this.resolve(rel);
+    const note = rel.endsWith(".md");
+    if (note) {
+      const was = await fs.readFile(abs, "utf8").catch(() => null);
+      if (was !== null) await this.keep("observe", this.history.observe(rel, was));
+    }
     await fs.mkdir(path.dirname(abs), { recursive: true });
     this.ownWrites.set(rel, content);
     await fs.writeFile(abs, content, "utf8");
+    if (note) await this.keep("record", this.history.record(rel, content, source));
+  }
+
+  /** Puts a saved version back, keeping the text it replaces as a version too. */
+  async restore(rel: string, id: string): Promise<string> {
+    const text = await this.history.read(rel, id);
+    const now = await fs.readFile(this.resolve(rel), "utf8").catch(() => null);
+    if (now !== null && now !== text) await this.keep("before-restore", this.history.record(rel, now, "before-restore"));
+    await this.write(rel, text, "restored");
+    return text;
   }
 
   async rename(from: string, to: string) {
@@ -122,9 +147,16 @@ export class Vault {
     }
     await fs.mkdir(path.dirname(dst), { recursive: true });
     await fs.rename(this.resolve(from), dst);
+    await this.keep("move", this.history.move(from, to));
   }
 
   async remove(rel: string) {
+    // The last text of each note goes into its history, so a deleted note's versions end with it.
+    const notes = rel.endsWith(".md") ? [rel] : (await this.readAll()).map((n) => n.path).filter((p) => p.startsWith(rel + "/"));
+    for (const n of notes) {
+      const text = await fs.readFile(this.resolve(n), "utf8").catch(() => null);
+      if (text !== null) await this.keep("deleted", this.history.record(n, text, "deleted"));
+    }
     // Recoverable, like Obsidian's .trash: a delete is a move. Folders go whole.
     const dst = this.resolve(path.join(".trash", `${Date.now()}-${path.basename(rel)}`));
     await fs.mkdir(path.dirname(dst), { recursive: true });
@@ -144,6 +176,7 @@ export class Vault {
         const file = await this.readNote(rel);
         if (this.ownWrites.get(rel) === file.content) return;
         this.ownWrites.delete(rel);
+        void this.keep("outside", this.history.record(rel, file.content, "outside"));
         emit({ type: "upsert", file });
       } catch {
         // Gone again before we could read it; the unlink event covers it.
