@@ -1,7 +1,5 @@
-// The openCanviz player, compiled from its source in the app checkout (the `@opencanviz/player`
-// alias in vite.config.ts): the renderer opencanviz.com and its MP4 export draw through, so a
-// note plays what the site shows, scene transitions included.
-// @ts-nocheck
+// The openCanviz player from npm: the renderer opencanviz.com and its MP4 export draw through,
+// so a note plays what the site shows, scene transitions included.
 import "./hands";
 import { configureAssets } from "@opencanviz/player";
 
@@ -11,5 +9,4 @@ const fonts = import.meta.glob("@canviz-fonts/*.woff2", { eager: true, query: "?
 const fontUrls = Object.fromEntries(Object.entries(fonts).map(([f, url]) => [f.replace(/^.*\//, ""), url as string]));
 configureAssets({ fontUrl: (file) => fontUrls[file] });
 
-export { createPlayer, buildProjectTimeline, toProject } from "@opencanviz/player";
-export const available = true;
+export { createPlayer, buildProjectTimeline, toProject, type ProjectRenderer } from "@opencanviz/player";

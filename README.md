@@ -88,7 +88,7 @@ npm run dev     # Vite + Electron with reload
 npm start       # production build, then run
 ```
 
-Set `OPENCANVIZ_APP` to an openCanviz app checkout to build with explainer playback (defaults to `~/animated-diagram-editor-app`).
+Explainers play through [`@opencanviz/player`](https://www.npmjs.com/package/@opencanviz/player) from npm.
 
 The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`, so a web or sync build can supply its own host.
 

@@ -1,4 +1,3 @@
-import { available } from "@canviz-engine";
 import type { BuiltinPlugin, RenderInfo } from "../api";
 import { parseExplainer } from "./check";
 import { CanvizPlayer, DiagramData, PlayerOptions } from "./player";
@@ -41,7 +40,6 @@ export const canvizPlugin: BuiltinPlugin = {
     const lastGood = new Map<string, { data: DiagramData; opts: PlayerOptions }>();
     const playhead = new Map<string, number>();
     const play = async (source: string, el: HTMLElement, info: RenderInfo) => {
-      if (!available) throw new Error("playback isn't included in this build");
       const key = `${info.notePath ?? ""}\n${sourceFile(source) ?? source}`;
       let loaded: { data: DiagramData; opts: PlayerOptions };
       let problem: string | null = null;
