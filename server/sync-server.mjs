@@ -31,6 +31,11 @@ const MAX_BODY = Number(process.env.MAX_FILE_MB || 70) * 1024 * 1024;
 const MAX_SPACE = Number(process.env.MAX_SPACE_MB || 2048) * 1024 * 1024;
 /** Spaces anyone may create; set CREATE_KEY to require "X-Create-Key" when making one. */
 const CREATE_KEY = process.env.CREATE_KEY || "";
+/** How many spaces this server holds at most, and how many one address may make in a day. */
+const MAX_SPACES = Number(process.env.MAX_SPACES || 1000);
+const CREATES_PER_DAY = Number(process.env.CREATES_PER_DAY || 5);
+/** Behind a reverse proxy, the client's address is in X-Real-IP (the proxy must overwrite it). */
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 
 const SPACE = /^[0-9a-f]{32}$/;
 const FID = /^[0-9a-f]{40}$/;
@@ -105,10 +110,21 @@ const json = (res, status, obj) => {
 const misses = new Map();
 const slow = (ip) => new Promise((r) => setTimeout(r, Math.min(5000, 250 * 2 ** Math.min(misses.get(ip) || 0, 5))));
 
+const creates = new Map();
+/** Counts a new space against its address; false once the day's allowance is used. */
+function made(ip) {
+  const day = Math.floor(Date.now() / 86_400_000);
+  const c = creates.get(ip);
+  const n = c?.day === day ? c.n : 0;
+  if (n >= CREATES_PER_DAY) return false;
+  creates.set(ip, { day, n: n + 1 });
+  return true;
+}
+
 async function api(req, res, url) {
   const [, , , id, kind, fid] = url.pathname.split("/"); // "", v1, spaces, id, kind, fid
   if (!SPACE.test(id || "")) return json(res, 404, { error: "no such space" });
-  const ip = req.socket.remoteAddress || "";
+  const ip = (TRUST_PROXY && req.headers["x-real-ip"]) || req.socket.remoteAddress || "";
 
   if (!kind && req.method === "PUT") {
     if (CREATE_KEY && req.headers["x-create-key"] !== CREATE_KEY) return json(res, 403, { error: "this server needs a create key" });
@@ -116,6 +132,8 @@ async function api(req, res, url) {
     if (!m) return json(res, 401, { error: "token required" });
     const have = await load(id);
     if (have) return authorized(have, req) ? json(res, 200, { seq: have.meta.seq }) : (await slow(ip), json(res, 401, { error: "wrong token" }));
+    if (!made(ip)) return json(res, 429, { error: "too many new spaces from this address today" });
+    if ((await fs.readdir(DATA)).filter((d) => SPACE.test(d)).length >= MAX_SPACES) return json(res, 507, { error: "this server is full" });
     const s = new Space(id, { tokenHash: sha(m[1]).toString("hex"), seq: 0, files: {} });
     await fs.mkdir(path.join(s.dir, "files"), { recursive: true });
     await s.save();

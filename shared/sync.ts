@@ -166,7 +166,14 @@ export class SyncClient {
     }
     if (res.status === 401) throw new SyncError("The sync server turned down this passphrase.", "auth");
     if (res.status === 404) throw new SyncError("The sync server has no space with this link.", "missing");
-    if (!ok.includes(res.status)) throw new SyncError(`The sync server answered ${res.status}: ${(await res.text()).slice(0, 200)}`, "server");
+    if (!ok.includes(res.status)) {
+      const text = (await res.text()).slice(0, 200);
+      let said = text;
+      try {
+        said = JSON.parse(text).error ?? text;
+      } catch {}
+      throw new SyncError(`The sync server said: ${said} (${res.status}).`, "server");
+    }
     return res;
   }
 

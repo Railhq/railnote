@@ -1,0 +1,26 @@
+# Railnote sync server on the Demorail droplet. Demorail's Caddy owns 80/443 and reaches
+# `railnote-sync` over Demorail's network. Nothing here publishes a port.
+name: railnote-sync
+
+services:
+  railnote-sync:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: railnote-sync
+    restart: unless-stopped
+    environment:
+      TRUST_PROXY: "1"
+      MAX_SPACE_MB: "1024"
+      MAX_SPACES: "500"
+    volumes:
+      - data:/data
+    networks: [edge]
+
+volumes:
+  data:
+
+networks:
+  edge:
+    external: true
+    name: demorail_default
