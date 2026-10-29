@@ -41,7 +41,7 @@ npm run build:web                    # the phone app, into dist-web/
 PORT=8787 DATA=./sync-data WEB=./dist-web node server/sync-server.mjs
 ```
 
-Put it behind HTTPS (Caddy, nginx): phones only install the app and keep it offline from a secure address. Settings: `CREATE_KEY` (only clients sending `X-Create-Key` may make new spaces), `MAX_FILE_MB` (70), `MAX_SPACE_MB` (2048). `DATA` is the only state; back it up like any folder. A `Dockerfile` for the server is in `server/`.
+Put it behind HTTPS (Caddy, nginx): phones only install the app and keep it offline from a secure address. Settings: `CREATE_KEY` (only clients sending `X-Create-Key` may make new spaces), `MAX_FILE_MB` (70), `MAX_SPACE_MB` (2048), `MAX_SPACES` (1000), `CREATES_PER_DAY` per address (5), `TRUST_PROXY=1` behind a proxy that overwrites `X-Real-IP`. `DATA` is the only state; back it up like any folder. A `Dockerfile` for the server is in `server/`.
 
 ## Plugins
 
