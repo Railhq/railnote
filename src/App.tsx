@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NoteFile, Settings } from "../shared/types";
+import type { NoteFile, Settings, SyncStatus } from "../shared/types";
 import { setLinkResolver } from "./editor/live-preview";
 import type { OpenWhere } from "./editor/hooks";
 import { plugins } from "./plugins/host";
@@ -14,7 +14,7 @@ import { AskSheet } from "./components/AskSheet";
 import { HistorySheet } from "./components/HistorySheet";
 import { carryPosition } from "./editor/Editor";
 import { HomeView, InboxView, OrganizeDialog, TasksView } from "./components/Views";
-import { SettingsDialog, Welcome } from "./components/Screens";
+import { SettingsDialog, Welcome, syncLine } from "./components/Screens";
 import { SourceView } from "./components/SourceView";
 import { NotePane, PaneHandle } from "./components/NotePane";
 import { GraphView } from "./components/GraphView";
@@ -35,6 +35,8 @@ function savedLayout(vault: string): Layout | null {
   }
 }
 
+const NARROW = "(max-width: 700px)";
+
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ws, setWs] = useState<Workspace | null>(null);
@@ -47,12 +49,21 @@ export function App() {
   const [searchKey, setSearchKey] = useState(0);
   // The sidebar starts folded so the page has the window; whichever way it's left is remembered.
   const [folded, setFolded] = useState(() => { try { return localStorage.getItem("railnote:sidebar") !== "open"; } catch { return true; } });
+  // A phone-sized window always has the rail, as a bar along the bottom.
+  const [narrow, setNarrow] = useState(() => matchMedia(NARROW).matches);
+  useEffect(() => {
+    const m = matchMedia(NARROW);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
   const foldedRef = useRef(folded);
   foldedRef.current = folded;
   const fold = (f: boolean) => { setFolded(f); try { localStorage.setItem("railnote:sidebar", f ? "folded" : "open"); } catch { /* per-viewer nicety only */ } };
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [pluginList, setPluginList] = useState<PluginEntry[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sync, setSync] = useState<SyncStatus | null>(null);
   const [goto, setGoto] = useState<{ pane: number; path: string; line: number; key: number } | null>(null);
   const [dropPane, setDropPane] = useState<number | null>(null);
   const [draggingTab, setDraggingTab] = useState(false);
@@ -202,6 +213,12 @@ export function App() {
       notice: (m) => setNotice(m),
     });
     const offIndex = ws.index.subscribe(() => setTick((t) => t + 1));
+    void host.syncStatus().then(setSync);
+    const offSync = host.onSyncEvent(({ status, conflicts }) => {
+      setSync(status);
+      if (conflicts?.length)
+        setNotice(conflicts.length === 1 ? `Another device changed a note you changed too. Its text is in ${conflicts[0].split("/").pop()}, beside yours.` : `Another device changed ${conflicts.length} files you changed too. Its versions are beside yours, marked "conflict".`);
+    });
     const offVault = host.onVaultEvent((e) => {
       if (e.type === "upsert") ws.index.upsert(e.file);
       else if (e.type === "file") ws.index.setFile(e.path, e.exists);
@@ -221,6 +238,7 @@ export function App() {
     return () => {
       offIndex();
       offVault();
+      offSync();
       offMenu();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -419,8 +437,8 @@ export function App() {
   };
 
   return (
-    <div className={`app${folded ? " folded" : ""}`}>
-      <Sidebar folded={folded} onFold={fold} ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
+    <div className={`app${folded || narrow ? " folded" : ""}${narrow ? " narrow" : ""}`}>
+      <Sidebar folded={folded || narrow} narrow={narrow} onFold={fold} ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} syncLine={syncLine(sync)} syncError={sync?.state === "error" ? sync.error : undefined} onSyncNow={() => void host.syncNow()} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
         {view !== "note" && <div className="drag-region" />}
         {view === "home" && <HomeView ws={ws} route={layout.panes[layout.focus].tabs.filter((t) => ws.index.notes.has(t))} here={layout.panes[layout.focus].active} onDaily={daily} onOpen={(p, line) => void open(p, line)} onOrganize={organize} onView={setView} />}

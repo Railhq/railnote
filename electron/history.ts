@@ -126,8 +126,8 @@ export class History {
       const last = vs[vs.length - 1];
       if (last?.hash === hash) return;
       // The watcher can report an outside save after the app has saved over it; it's already kept.
-      if (source === "outside" && vs.slice(-3).some((v) => v.hash === hash)) return;
-      const [quiet, span] = source === "app" ? [APP_QUIET, APP_RUN] : source === "outside" ? [OUTSIDE_QUIET, OUTSIDE_RUN] : [0, 0];
+      if ((source === "outside" || source === "synced") && vs.slice(-3).some((v) => v.hash === hash)) return;
+      const [quiet, span] = source === "app" ? [APP_QUIET, APP_RUN] : source === "outside" || source === "synced" ? [OUTSIDE_QUIET, OUTSIDE_RUN] : [0, 0];
       const fold = last && last.source === source && now - last.time < quiet && now - last.start < span;
       if (fold) vs.pop();
       const prev = vs[vs.length - 1];

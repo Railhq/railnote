@@ -10,7 +10,10 @@
     "build:export": "vite build -c vite.export.config.ts",
     "build": "tsc --noEmit && npm run build:electron && npm run build:renderer && npm run build:export",
     "start": "npm run build && electron .",
-    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env RAILNOTE_DEV=1 electron .\""
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env RAILNOTE_DEV=1 electron .\"",
+    "build:web": "vite build -c vite.web.config.ts",
+    "sync-server": "node server/sync-server.mjs",
+    "test:sync": "node test/sync.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.136.0",

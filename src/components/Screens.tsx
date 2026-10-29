@@ -1,9 +1,74 @@
 import { useEffect, useState } from "react";
-import type { Settings } from "../../shared/types";
+import type { Settings, SyncStatus } from "../../shared/types";
 import { host } from "../workspace";
 import type { PluginEntry } from "../plugins/loader";
 
 export function Welcome({ settings, onOpened }: { settings: Settings; onOpened(dir: string, files: Awaited<ReturnType<typeof host.openVault>>): void }) {
+  if (host.kind === "phone") return <PhoneWelcome onOpened={onOpened} />;
+  return <DesktopWelcome settings={settings} onOpened={onOpened} />;
+}
+
+/** The phone's first run: bring the vault over from a computer, or start one here. */
+function PhoneWelcome({ onOpened }: { onOpened(dir: string, files: Awaited<ReturnType<typeof host.openVault>>): void }) {
+  // Opening the sync link itself on the phone lands here with the link in the address bar.
+  const here = location.hash.length === 33 ? `${location.origin}${location.pathname.replace(/\/(index\.html)?$/, "")}${location.hash}` : "";
+  const [link, setLink] = useState(here);
+  const [pass, setPass] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const open = async () => {
+    const s = await host.getSettings();
+    onOpened(s.vaultPath!, await host.openVault(s.vaultPath!));
+  };
+  const join = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const status = await host.turnOnSync({ link: link.trim(), passphrase: pass });
+      if (status.state === "error") throw new Error(status.error ?? "Couldn't sync");
+      history.replaceState(null, "", location.pathname);
+      await open();
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="welcome phone">
+      <div className="welcome-card">
+        <h1>Railnote</h1>
+        <p className="muted">Your notes from your computer, on this phone. Changes go both ways.</p>
+        <h4>Join your vault</h4>
+        <div className="muted small">On your computer, open Settings, then Sync, and copy the sync link.</div>
+        <input placeholder="Sync link" value={link} onChange={(e) => setLink(e.target.value)} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        <input type="password" placeholder="Passphrase" value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link && pass && join()} />
+        <button className="primary big" disabled={busy || !link.trim() || !pass} onClick={join}>
+          {busy ? "Bringing your notes over…" : "Join and sync"}
+        </button>
+        {err && <div className="error">{err}</div>}
+        <div className="or muted small">or</div>
+        <button
+          className="big"
+          disabled={busy}
+          onClick={async () => {
+            try {
+              const files = await host.createVault("");
+              const s = await host.getSettings();
+              onOpened(s.vaultPath!, files);
+            } catch (e) {
+              setErr((e as Error).message);
+            }
+          }}
+        >
+          Start a vault on this phone
+        </button>
+        <div className="muted small">Notes stay on this phone until you turn on sync in Settings.</div>
+      </div>
+    </div>
+  );
+}
+
+function DesktopWelcome({ settings, onOpened }: { settings: Settings; onOpened(dir: string, files: Awaited<ReturnType<typeof host.openVault>>): void }) {
   const [err, setErr] = useState<string | null>(null);
   const go = async (fn: () => Promise<[string, Awaited<ReturnType<typeof host.openVault>>] | null>) => {
     try {
@@ -97,10 +162,15 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
         <label className="field">Daily notes<input value={daily} onChange={(e) => setDaily(e.target.value)} /></label>
         <label className="field">Templates<input value={templates} onChange={(e) => setTemplates(e.target.value)} /></label>
         <label className="field">Pasted and dropped files<input value={attachments} placeholder="./ keeps them next to the note" onChange={(e) => setAttachments(e.target.value)} /></label>
+        <SyncSettings />
         <PluginSettings settings={settings} plugins={plugins} onChanged={onPluginsChanged} />
-        <h4>Vault</h4>
-        <div className="muted small">{settings.vaultPath}</div>
-        <button className="mini" onClick={onSwitchVault}>Switch vault…</button>
+        {host.kind !== "phone" && (
+          <>
+            <h4>Vault</h4>
+            <div className="muted small">{settings.vaultPath}</div>
+            <button className="mini" onClick={onSwitchVault}>Switch vault…</button>
+          </>
+        )}
         <div className="dialog-foot">
           <button onClick={onClose}>Cancel</button>
           <button className="primary" onClick={save}>Save</button>
@@ -163,6 +233,112 @@ function PluginSettings({ settings, plugins, onChanged }: { settings: Settings; 
           </>
         )}
       </div>
+    </>
+  );
+}
+
+/** How long ago, in words, for the sync line. */
+export function agoText(t: number, now = Date.now()) {
+  const s = Math.round((now - t) / 1000);
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h} h ago` : new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+export function syncLine(s: SyncStatus | null) {
+  if (!s?.on) return null;
+  if (s.state === "syncing") return "Syncing…";
+  if (s.state === "error") return "Sync stopped";
+  return s.last ? `Synced ${agoText(s.last)}` : "Sync on";
+}
+
+/** Sync applies right away too: turning it on talks to the server, so it can't wait for Save. */
+function SyncSettings() {
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [mode, setMode] = useState<"start" | "join">("start");
+  const [server, setServer] = useState("");
+  const [link, setLink] = useState("");
+  const [pass, setPass] = useState("");
+  const [again, setAgain] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    host.syncStatus().then(setStatus);
+    return host.onSyncEvent((e) => setStatus(e.status));
+  }, []);
+  const act = async (fn: () => Promise<SyncStatus>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await fn());
+      setPass("");
+      setAgain("");
+    } catch (e) {
+      setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ""));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!status) return null;
+  if (status.on)
+    return (
+      <>
+        <h4>Sync</h4>
+        <p className="muted small">
+          {syncLine(status)}
+          {status.state === "error" && status.error ? `: ${status.error}` : "."} Notes are encrypted here before they leave; the server can't read them.
+        </p>
+        <label className="field">
+          Link for your other devices
+          <span className="sync-link">
+            <input readOnly value={status.link} onFocus={(e) => e.target.select()} />
+            <button className="mini" onClick={async () => { await navigator.clipboard.writeText(status.link!); setCopied(true); }}>{copied ? "Copied" : "Copy"}</button>
+          </span>
+        </label>
+        <p className="muted small">On your phone, open this link in the browser and enter the same passphrase. Add it to your home screen to use it like an app.</p>
+        <div className="sync-actions">
+          <button className="mini" disabled={busy} onClick={() => act(() => host.syncNow())}>Sync now</button>
+          <button className="mini" disabled={busy} onClick={() => act(() => host.turnOffSync())}>Turn off sync on this {host.kind === "phone" ? "phone" : "computer"}</button>
+        </div>
+      </>
+    );
+  const short = pass.length > 0 && pass.length < 8;
+  const mismatch = mode === "start" && again.length > 0 && again !== pass;
+  const ready = pass.length >= 8 && (mode === "join" ? link.trim() : server.trim() && again === pass);
+  return (
+    <>
+      <h4>Sync</h4>
+      <div className="seg sync-mode" role="tablist">
+        <button role="tab" aria-selected={mode === "start"} className={mode === "start" ? "on" : ""} onClick={() => setMode("start")}>Start syncing this vault</button>
+        <button role="tab" aria-selected={mode === "join"} className={mode === "join" ? "on" : ""} onClick={() => setMode("join")}>Join from another device</button>
+      </div>
+      {mode === "start" ? (
+        <label className="field">Sync server<input value={server} placeholder="https://sync.example.com" onChange={(e) => setServer(e.target.value)} /></label>
+      ) : (
+        <label className="field">Link from the other device<input value={link} placeholder="https://sync.example.com#…" onChange={(e) => setLink(e.target.value)} /></label>
+      )}
+      <label className="field">
+        Passphrase {short && <span className="muted">(at least 8 characters)</span>}
+        <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
+      </label>
+      {mode === "start" && (
+        <label className="field">
+          Passphrase again {mismatch && <span className="muted">(doesn't match)</span>}
+          <input type="password" value={again} onChange={(e) => setAgain(e.target.value)} />
+        </label>
+      )}
+      <p className="muted small">
+        {mode === "start"
+          ? "Notes are encrypted on each device with this passphrase. The server can't read them, and nobody can recover them if it's lost, so keep it somewhere safe."
+          : "Join into an empty vault if you can. Notes already here that differ from the other device's are kept, with the other device's text beside them as a conflict copy."}
+      </p>
+      {error && <p className="sync-error" role="alert">{error}</p>}
+      <button className="mini" disabled={busy || !ready} onClick={() => act(() => host.turnOnSync(mode === "join" ? { link: link.trim(), passphrase: pass } : { server: server.trim(), passphrase: pass }))}>
+        {busy ? "Connecting…" : mode === "start" ? "Start syncing" : "Join"}
+      </button>
     </>
   );
 }

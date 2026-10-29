@@ -3,6 +3,9 @@ import path from "path";
 import chokidar, { FSWatcher } from "chokidar";
 import type { NoteFile, VaultEvent, VaultListing, VersionSource } from "../shared/types";
 import { History } from "./history";
+import { STARTER_FILES } from "../shared/starter";
+
+export { STARTER_FILES };
 
 export const IGNORED = /(^|[\/\\])(\.(obsidian|git|trash|railnote|claude)|node_modules)([\/\\]|$)/;
 
@@ -13,6 +16,8 @@ export class Vault {
   private watcher?: FSWatcher;
   // Content we just wrote, so the watcher doesn't echo our own saves back as external edits.
   private ownWrites = new Map<string, string>();
+  // Notes that just came from another device: the watcher passes them on, labelled as such.
+  private syncedWrites = new Map<string, string>();
 
   readonly history: History;
 
@@ -128,6 +133,20 @@ export class Vault {
     if (note) await this.keep("record", this.history.record(rel, content, source));
   }
 
+  /** Writes a file that arrived from another device. The watcher tells the window, as for any outside edit. */
+  async writeSynced(rel: string, bytes: Uint8Array) {
+    const abs = this.resolve(rel);
+    if (rel.endsWith(".md")) {
+      const was = await fs.readFile(abs, "utf8").catch(() => null);
+      if (was !== null) await this.keep("observe", this.history.observe(rel, was));
+      this.syncedWrites.set(rel, Buffer.from(bytes).toString("utf8"));
+    }
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+    const tmp = path.join(path.dirname(abs), `.${path.basename(abs)}.sync-tmp`);
+    await fs.writeFile(tmp, bytes);
+    await fs.rename(tmp, abs);
+  }
+
   /** Puts a saved version back, keeping the text it replaces as a version too. */
   async restore(rel: string, id: string): Promise<string> {
     const text = await this.history.read(rel, id);
@@ -176,7 +195,9 @@ export class Vault {
         const file = await this.readNote(rel);
         if (this.ownWrites.get(rel) === file.content) return;
         this.ownWrites.delete(rel);
-        void this.keep("outside", this.history.record(rel, file.content, "outside"));
+        const synced = this.syncedWrites.get(rel) === file.content;
+        this.syncedWrites.delete(rel);
+        void this.keep("outside", this.history.record(rel, file.content, synced ? "synced" : "outside"));
         emit({ type: "upsert", file });
       } catch {
         // Gone again before we could read it; the unlink event covers it.
@@ -208,64 +229,6 @@ export class Vault {
     await this.watcher?.close();
   }
 }
-
-const today = () => new Date().toISOString().slice(0, 10);
-
-/** First-run layout: a vault that works with zero setup. */
-export const STARTER_FILES: Record<string, () => string> = {
-  "Welcome.md": () => `---
-tags: [railnote]
----
-# Welcome to Railnote
-
-Plain Markdown files in a folder you own. No setup, no plugins to hunt for.
-
-## What's built in
-- **Daily notes**: Cmd+D opens today's note in [[Daily]].
-- **Links**: type \`[[\` to link a note. Cmd+click a link to follow it. Notes that link here are listed at the end of the note.
-- **Tasks**: every \`- [ ]\` in the vault shows up in the Tasks view.
-- **Search**: Cmd+K jumps to a note, Cmd+Shift+F searches every note.
-- **Inbox**: capture anything into Inbox/, then press **Organize** and Claude suggests a folder, tags and links.
-- **Ask**: ask a question and get an answer from your own notes, with links to the notes it used.
-- **Explainers**: an animated explainer plays inline from a \`\`\`canviz block.
-
-## Your agents can use this vault too
-Everything is a Markdown file, so Claude Code or any other agent can read and edit it. See [[AGENTS]].
-Edits made outside the app show up live.
-
-- [ ] Write your first note
-- [ ] Try Cmd+K
-`,
-  "AGENTS.md": () => `# AGENTS.md
-
-Instructions for AI agents working in this vault.
-
-- Notes are Markdown. Link notes with \`[[Note name]]\`. Tags go in frontmatter \`tags: [a, b]\` or inline as #tag.
-- New captures go in \`Inbox/\`. Daily notes live in \`Daily/YYYY-MM-DD.md\`.
-- Tasks are \`- [ ] text\`. Mark done with \`- [x]\`.
-- Explainers (animated openCanviz diagrams) are JSON in \`*.canviz\` files or \`\`\`canviz\` blocks. Before editing one, read \`.claude/skills/railnote-explainers/SKILL.md\`, and check your edit with \`node .claude/skills/railnote-explainers/check.mjs <file>\`.
-- Don't touch \`.railnote/\` or \`.obsidian/\`.
-`,
-  "Inbox/.keep": () => "",
-  "Notes/.keep": () => "",
-  "Attachments/.keep": () => "",
-  "Templates/Daily.md": () => `# {{date}}
-
-## Plan
-- [ ]
-
-## Notes
-
-`,
-  [`Daily/${today()}.md`]: () => `# ${today()}
-
-## Plan
-- [ ] Explore [[Welcome]]
-
-## Notes
-
-`,
-};
 
 /**
  * Copies the agent skills the app ships (built into dist-electron/skills) into the vault's

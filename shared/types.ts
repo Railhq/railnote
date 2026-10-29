@@ -72,7 +72,26 @@ export interface PluginManifest {
 }
 
 /** Where a saved version came from. */
-export type VersionSource = "original" | "app" | "outside" | "before-restore" | "restored" | "deleted";
+export type VersionSource = "original" | "app" | "outside" | "synced" | "before-restore" | "restored" | "deleted";
+
+/** Where sync stands for the open vault. The passphrase never comes back from the host. */
+export interface SyncStatus {
+  on: boolean;
+  /** What another device enters, with the passphrase, to join. */
+  link?: string;
+  state?: "idle" | "syncing" | "error";
+  /** When the last round finished. */
+  last?: number;
+  error?: string;
+}
+
+export interface SyncSetup {
+  /** The server, to start a new space as the first device. */
+  server?: string;
+  /** Or a link from a device already syncing, to join its space. */
+  link?: string;
+  passphrase: string;
+}
 
 /** One saved version of a note, kept in the vault's .railnote/history. */
 export interface NoteVersion {
@@ -86,6 +105,8 @@ export interface NoteVersion {
 
 /** Everything the renderer may ask of the host. A web or sync build implements the same interface. */
 export interface HostApi {
+  /** The desktop app, or the web build a phone installs. */
+  kind: "desktop" | "phone";
   getSettings(): Promise<Settings>;
   setSettings(patch: Partial<Settings>): Promise<Settings>;
   chooseVault(): Promise<string | null>;
@@ -120,6 +141,12 @@ export interface HostApi {
   readVersion(path: string, id: string): Promise<string>;
   /** Puts a version back as the note's text, keeping the text it replaces as a version; returns the text. */
   restoreVersion(path: string, id: string): Promise<string>;
+  syncStatus(): Promise<SyncStatus>;
+  turnOnSync(setup: SyncSetup): Promise<SyncStatus>;
+  turnOffSync(): Promise<SyncStatus>;
+  syncNow(): Promise<SyncStatus>;
+  /** Each change of sync status, with any conflict copies the round made. */
+  onSyncEvent(cb: (e: { status: SyncStatus; conflicts?: string[] }) => void): () => void;
   onVaultEvent(cb: (e: VaultEvent) => void): () => void;
   /** Menu items the renderer acts on, such as "close-tab". */
   onMenuCommand(cb: (cmd: string) => void): () => void;

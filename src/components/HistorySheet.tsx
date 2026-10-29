@@ -16,6 +16,7 @@ const SOURCE: Record<VersionSource, string> = {
   original: "Before Railnote's first edit",
   app: "Edited here",
   outside: "Changed outside Railnote",
+  synced: "From another device",
   "before-restore": "Replaced by a restore",
   restored: "Restored",
   deleted: "Deleted",

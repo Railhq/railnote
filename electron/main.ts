@@ -5,9 +5,11 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { Readable } from "stream";
-import type { OrganizeRequest, PluginManifest, Settings, AskSource } from "../shared/types";
+import type { OrganizeRequest, PluginManifest, Settings, AskSource, SyncSetup, SyncStatus } from "../shared/types";
+import type { SyncConfig } from "../shared/sync";
 import { IGNORED, Vault, createStarterVault, installAgentSkills } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
+import { setUpSync, syncVault } from "./sync";
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
 
@@ -36,7 +38,8 @@ const DEFAULTS: Settings = {
 };
 
 const settingsFile = () => path.join(app.getPath("userData"), "settings.json");
-let settings: Settings = { ...DEFAULTS };
+/** Settings plus what only the main process may read: each vault's sync passphrase. */
+let settings: Settings & { sync?: Record<string, SyncConfig> } = { ...DEFAULTS };
 const SKILLS = path.join(__dirname, "skills");
 let vault: Vault | undefined;
 let win: BrowserWindow | undefined;
@@ -55,13 +58,32 @@ async function saveSettings() {
 }
 
 /** The renderer never sees the API key; it only learns whether one is set. */
-const publicSettings = (): Settings => ({ ...settings, anthropicApiKey: settings.anthropicApiKey ? "set" : undefined });
+const publicSettings = (): Settings => {
+  const { sync: _, ...rest } = settings;
+  return { ...rest, anthropicApiKey: settings.anthropicApiKey ? "set" : undefined };
+};
+
+let sync: ReturnType<typeof syncVault> | undefined;
+const OFF: SyncStatus = { on: false };
+
+function startSync() {
+  sync?.stop();
+  sync = undefined;
+  const cfg = vault && settings.sync?.[vault.root];
+  if (!vault || !cfg) return;
+  sync = syncVault(vault, cfg, (status, conflicts) => win?.webContents.send("sync:event", { status, conflicts }));
+  sync.start();
+}
 
 async function open(dir: string) {
   await vault?.close();
   vault = new Vault(path.resolve(dir));
   const files = await vault.readAll();
-  vault.watch((e) => win?.webContents.send("vault:event", e));
+  vault.watch((e) => {
+    win?.webContents.send("vault:event", e);
+    sync?.poke();
+  });
+  startSync();
   settings.vaultPath = vault.root;
   settings.recentVaults = [vault.root, ...settings.recentVaults.filter((v) => v !== vault!.root)].slice(0, 8);
   await saveSettings();
@@ -181,7 +203,7 @@ function registerIpc() {
   ipcMain.handle("plugins:list", () => listVaultPlugins());
   ipcMain.handle("settings:get", () => publicSettings());
   ipcMain.handle("settings:set", async (_e, patch: Partial<Settings>) => {
-    const { anthropicApiKey, ...rest } = patch;
+    const { anthropicApiKey, sync: _, ...rest } = patch as typeof settings;
     settings = { ...settings, ...rest };
     if (anthropicApiKey !== undefined) settings.anthropicApiKey = anthropicApiKey || undefined;
     await saveSettings();
@@ -192,6 +214,25 @@ function registerIpc() {
     return r.canceled ? null : r.filePaths[0];
   });
   ipcMain.handle("vault:open", (_e, dir: string) => open(dir));
+  ipcMain.handle("sync:status", () => sync?.status ?? OFF);
+  ipcMain.handle("sync:on", async (_e, setup: SyncSetup) => {
+    const root = need().root;
+    const cfg = await setUpSync(setup);
+    settings.sync = { ...settings.sync, [root]: cfg };
+    await saveSettings();
+    startSync();
+    return sync!.status;
+  });
+  ipcMain.handle("sync:off", async () => {
+    const root = need().root;
+    const { [root]: _, ...rest } = settings.sync ?? {};
+    settings.sync = rest;
+    await saveSettings();
+    startSync();
+    await fs.rm(path.join(root, ".railnote", "sync.json"), { force: true });
+    return OFF;
+  });
+  ipcMain.handle("sync:now", () => sync?.now() ?? OFF);
   ipcMain.handle("vault:create", async (_e, dir: string) => {
     const target = dir || path.join(app.getPath("documents"), "Railnote");
     await fs.mkdir(target, { recursive: true });
@@ -201,12 +242,12 @@ function registerIpc() {
   });
   // Updates a vault's copy of the agent skills to the ones this version of the app ships.
   ipcMain.handle("vault:installSkills", () => installAgentSkills(need().root, SKILLS, true));
-  ipcMain.handle("vault:write", (_e, p: string, c: string) => need().write(p, c));
-  ipcMain.handle("vault:rename", (_e, a: string, b: string) => need().rename(a, b));
-  ipcMain.handle("vault:remove", (_e, p: string) => need().remove(p));
+  ipcMain.handle("vault:write", (_e, p: string, c: string) => need().write(p, c).then(() => sync?.poke()));
+  ipcMain.handle("vault:rename", (_e, a: string, b: string) => need().rename(a, b).then(() => sync?.poke()));
+  ipcMain.handle("vault:remove", (_e, p: string) => need().remove(p).then(() => sync?.poke()));
   ipcMain.handle("history:list", (_e, p: string) => need().history.list(p));
   ipcMain.handle("history:read", (_e, p: string, id: string) => need().history.read(p, id));
-  ipcMain.handle("history:restore", (_e, p: string, id: string) => need().restore(p, id));
+  ipcMain.handle("history:restore", (_e, p: string, id: string) => need().restore(p, id).then((t) => (sync?.poke(), t)));
   ipcMain.handle("vault:readRaw", (_e, p: string) => need().readRaw(p));
   ipcMain.handle("vault:findByName", (_e, name: string) => need().findByName(name));
   ipcMain.handle("vault:readBase64", async (_e, p: string) => (await fs.readFile(need().resolve(p))).toString("base64"));
@@ -299,6 +340,8 @@ function createWindow() {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
+  // Coming back to the window is when you'd look for what you wrote on your phone.
+  win.on("focus", () => sync?.poke());
   if (process.env.RAILNOTE_DEV) win.loadURL("http://localhost:5199");
   else win.loadFile(path.join(__dirname, "../dist/index.html"));
 }

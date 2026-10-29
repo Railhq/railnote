@@ -24,6 +24,25 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 - **History** keeps every note's saved versions in the vault, in `.railnote/history`: your edits, edits an agent or another app made, and the text before Railnote first touched it. They show as stops on a line, each compared with the note now, and any of them can be put back (⇧⌘H). Older versions thin out to one an hour, then one a day, then one a week.
 - **The sidebar folds** to a slim rail by default, so the page has the window. Point at the folder lines to peek at every note; ⇧⌘\\ keeps it open.
 
+## Sync and your phone
+
+Sync keeps a vault the same on every computer and phone you use, through a small server you run yourself (`server/sync-server.mjs`, plain Node, no dependencies).
+
+- **End-to-end encrypted.** Each device turns your passphrase into the keys, then encrypts every file and its name before it leaves. The server stores numbered, unreadable blobs: it knows how many files there are, how big they are and when they change, nothing else. Nobody can recover the passphrase, the server included.
+- **Turning it on.** Settings, Sync: give the server's address and a passphrase. You get a sync link (`https://your-server#<space>`). On another computer, choose **Join from another device** and paste it.
+- **On a phone.** Open the sync link in the phone's browser, enter the passphrase, and your notes come over. Add it to the home screen to use it like an app. The phone keeps the vault in its own storage and works offline; it syncs when you open it and while it's open.
+- **Conflicts.** Edits on two devices to the same note while apart keep both: yours stays, and the other device's text sits beside it as `Note (conflict 2026-10-29).md`. An edit wins over a delete.
+- **What stays local.** Version history is kept per computer (`.railnote/` never syncs). The phone has no version history or PDF export; Ask and Organize work there with an API key set on the phone, which is then stored in the browser.
+
+### Run a sync server
+
+```bash
+npm run build:web                    # the phone app, into dist-web/
+PORT=8787 DATA=./sync-data WEB=./dist-web node server/sync-server.mjs
+```
+
+Put it behind HTTPS (Caddy, nginx): phones only install the app and keep it offline from a secure address. Settings: `CREATE_KEY` (only clients sending `X-Create-Key` may make new spaces), `MAX_FILE_MB` (70), `MAX_SPACE_MB` (2048). `DATA` is the only state; back it up like any folder. A `Dockerfile` for the server is in `server/`.
+
 ## Plugins
 
 A plugin claims a code-block language or a file type, and Railnote hands it an element to draw into. It can also add commands to the ⌘P palette and read and write vault files. The whole API is in [`src/plugins/api.ts`](src/plugins/api.ts).
@@ -80,7 +99,7 @@ Vault plugins are off until you allow them: Settings, Plugins, **Allow plugins i
 
 ## Claude
 
-Set an Anthropic API key in Settings (or `ANTHROPIC_API_KEY`). The key is stored in the app's data folder with owner-only permissions and never reaches the page. The default model is `claude-opus-5-5`, changeable in Settings. Requests enable the API's server-side fallback, so a request the primary model declines can be retried by a fallback model.
+Set an Anthropic API key in Settings (or `ANTHROPIC_API_KEY`). On a computer the key is stored in the app's data folder with owner-only permissions and never reaches the page. The default model is `claude-opus-5-5`, changeable in Settings. Requests enable the API's server-side fallback, so a request the primary model declines can be retried by a fallback model.
 
 ## Develop
 
@@ -88,11 +107,13 @@ Set an Anthropic API key in Settings (or `ANTHROPIC_API_KEY`). The key is stored
 npm install
 npm run dev     # Vite + Electron with reload
 npm start       # production build, then run
+npm run build:web     # the phone app (src/web/host.ts stands in for Electron)
+npm run sync-server   # a local sync server on :8787
 ```
 
 Explainers play through [`@opencanviz/player`](https://www.npmjs.com/package/@opencanviz/player) from npm.
 
-The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`, so a web or sync build can supply its own host.
+The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`. The desktop host is the Electron preload; the phone host is `src/web/host.ts`, which keeps the vault in IndexedDB. Both sync through `shared/sync.ts`.
 
 ## License
 

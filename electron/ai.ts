@@ -8,7 +8,8 @@ const FALLBACK = { betas: ["server-side-fallback-2026-07-01"], fallbacks: "defau
 
 function client(apiKey?: string) {
   // No key in settings: the SDK falls back to ANTHROPIC_API_KEY or an `ant auth login` profile.
-  return new Anthropic(apiKey ? { apiKey } : {});
+  // The phone build calls the API from the page itself, with the key the user typed there.
+  return new Anthropic(apiKey ? { apiKey, dangerouslyAllowBrowser: typeof window !== "undefined" } : {});
 }
 
 export function describeError(e: unknown): string {

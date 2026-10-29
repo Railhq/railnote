@@ -21,6 +21,10 @@ interface Props {
   onNew(folder?: string): void;
   onDaily(): void;
   onSettings(): void;
+  /** What the sync line under the tree says, or null with sync off. */
+  syncLine?: string | null;
+  syncError?: string;
+  onSyncNow?(): void;
   onDelete(path: string, kind: EntryKind): void;
   /** Renames or moves a note, attachment or folder. `to` is the full new vault path. */
   onMove(kind: EntryKind, from: string, to: string): Promise<void>;
@@ -30,6 +34,8 @@ interface Props {
   /** Folded down to a slim rail so the page has the window; the full sidebar peeks out over it. */
   folded: boolean;
   onFold(folded: boolean): void;
+  /** Phone width: the rail is a bar along the bottom, and the notes open over the whole page. */
+  narrow?: boolean;
 }
 
 interface Tree {
@@ -68,6 +74,12 @@ export function Sidebar(p: Props) {
   const idx = p.ws.index;
   const [peek, setPeek] = useState(false);
   const peekTimer = useRef(0);
+  // On a phone the notes cover the page, so going anywhere from them puts them away, even to the note already open.
+  const away = () => p.narrow && setPeek(false);
+  const onOpen: Props["onOpen"] = (...a) => (away(), p.onOpen(...a));
+  const onView: Props["onView"] = (...a) => (away(), p.onView(...a));
+  const onOpenFile: Props["onOpenFile"] = (...a) => (away(), p.onOpenFile(...a));
+  const onNew: Props["onNew"] = (...a) => (away(), p.onNew(...a));
   useEffect(() => {
     if (!p.searchKey) return;
     setTab("search");
@@ -209,7 +221,7 @@ export function Sidebar(p: Props) {
           key={it.path}
           className={`tree-note${it.kind === "file" ? " file" : ""}${active ? " active" : ""}${i === sorted.length - 1 ? " last" : ""}`}
           style={{ "--x": `${stopX(depth)}px`, "--track": line } as React.CSSProperties}
-          onClick={(ev) => (it.kind === "note" ? p.onOpen(it.path, whereFrom(ev)) : p.onOpenFile(it.path))}
+          onClick={(ev) => (it.kind === "note" ? onOpen(it.path, whereFrom(ev)) : onOpenFile(it.path))}
           onContextMenu={(ev) => openMenu(ev, e)}
           title={it.path}
           {...dragProps(e)}
@@ -243,7 +255,7 @@ export function Sidebar(p: Props) {
   };
 
   const menuItems = (e: Entry | null): [string, () => void][] => {
-    if (!e) return [["New note", () => p.onNew("")], ["New folder", () => void newFolder("")]];
+    if (!e) return [["New note", () => onNew("")], ["New folder", () => void newFolder("")]];
     const name = e.kind === "note" ? fileName(e.path).replace(/\.md$/, "") : fileName(e.path);
     const common: [string, () => void][] = [
       ["Rename", () => setEditing(e)],
@@ -254,33 +266,33 @@ export function Sidebar(p: Props) {
         if (confirm(`Move ${what} to the vault's .trash folder?`)) p.onDelete(e.path, e.kind);
       }],
     ];
-    if (e.kind === "folder") return [["New note here", () => p.onNew(e.path)], ["New folder here", () => void newFolder(e.path)], ...common];
-    if (e.kind === "note") return [["Open in new tab", () => p.onOpen(e.path, "tab")], ["Open to the side", () => p.onOpen(e.path, "split")], ...common];
-    return [["Open", () => p.onOpenFile(e.path)], ...common];
+    if (e.kind === "folder") return [["New note here", () => onNew(e.path)], ["New folder here", () => void newFolder(e.path)], ...common];
+    if (e.kind === "note") return [["Open in new tab", () => onOpen(e.path, "tab")], ["Open to the side", () => onOpen(e.path, "split")], ...common];
+    return [["Open", () => onOpenFile(e.path)], ...common];
   };
 
   const lines = folderLines(idx);
   const today = new Date();
   const slim = (
-    <aside className="sidebar slim" aria-label="Sidebar, folded" onMouseLeave={() => peek && leavePeek()}>
+    <aside className="sidebar slim" aria-label="Sidebar, folded" onMouseLeave={() => peek && !p.narrow && leavePeek()}>
       <div className="drag-region" />
-      <button className="slim-new" onClick={() => p.onNew()} title="New note in the inbox (⌘N)" aria-label="New note">+</button>
-      <button className={`slim-btn${p.view === "home" ? " on" : ""}`} onClick={() => p.onView("home")} title="Today" aria-label="Today">
+      <button className="slim-new" onClick={() => onNew()} title="New note in the inbox (⌘N)" aria-label="New note">+</button>
+      <button className={`slim-btn${p.view === "home" ? " on" : ""}`} onClick={() => onView("home")} title="Today" aria-label="Today">
         <span className="slim-day">{today.getDate()}</span>
       </button>
-      <button className={`slim-btn${p.view === "inbox" ? " on" : ""}`} onClick={() => p.onView("inbox")} title={`Inbox${inboxCount ? `, ${inboxCount} waiting` : ""}`} aria-label="Inbox">
+      <button className={`slim-btn${p.view === "inbox" ? " on" : ""}`} onClick={() => onView("inbox")} title={`Inbox${inboxCount ? `, ${inboxCount} waiting` : ""}`} aria-label="Inbox">
         <svg viewBox="0 0 20 20"><path d="M3 11.5 5 4h10l2 7.5V16H3z M3 11.5h4.5l1 2h3l1-2H17" /></svg>
         {inboxCount > 0 && <span className="slim-badge">{inboxCount}</span>}
       </button>
-      <button className={`slim-btn${p.view === "tasks" ? " on" : ""}`} onClick={() => p.onView("tasks")} title={`Tasks${openTasks ? `, ${openTasks} open` : ""}`} aria-label="Tasks">
+      <button className={`slim-btn${p.view === "tasks" ? " on" : ""}`} onClick={() => onView("tasks")} title={`Tasks${openTasks ? `, ${openTasks} open` : ""}`} aria-label="Tasks">
         <svg viewBox="0 0 20 20"><rect x="3.5" y="3.5" width="13" height="13" rx="3" /><path d="m7 10 2.2 2.2L13.5 8" /></svg>
         {openTasks > 0 && <span className="slim-badge">{openTasks}</span>}
       </button>
-      <button className={`slim-btn${p.view === "graph" ? " on" : ""}`} onClick={() => p.onView("graph")} title="Graph (⌥⌘G)" aria-label="Graph">
+      <button className={`slim-btn${p.view === "graph" ? " on" : ""}`} onClick={() => onView("graph")} title="Graph (⌥⌘G)" aria-label="Graph">
         <svg viewBox="0 0 20 20"><path d="M4 15 9 10h7" /><circle cx="4" cy="15" r="2" /><circle cx="9.5" cy="10" r="2" /><circle cx="16" cy="10" r="2" /></svg>
       </button>
       {/* The folders as a strip of line colours; pointing at it opens the full map of notes. */}
-      <button className="slim-lines" onMouseEnter={peekSoon} onMouseLeave={stayPut} onClick={() => setPeek(true)} title="Your notes" aria-label="Show your notes">
+      <button className={`slim-lines${peek ? " on" : ""}`} onMouseEnter={p.narrow ? undefined : peekSoon} onMouseLeave={stayPut} onClick={() => setPeek(p.narrow ? !peek : true)} title="Your notes" aria-label="Show your notes">
         {lines.map((l) => <i key={l} style={{ background: lineColour(lines, l + "/") }} title={l} />)}
       </button>
       <div className="slim-foot">
@@ -298,18 +310,18 @@ export function Sidebar(p: Props) {
   return (
     <>
     {p.folded && slim}
-    <aside className={`sidebar${p.folded ? " peek" : ""}`} onMouseEnter={stayPut} onMouseLeave={p.folded ? leavePeek : undefined}>
+    <aside className={`sidebar${p.folded ? " peek" : ""}`} onMouseEnter={stayPut} onMouseLeave={p.folded && !p.narrow ? leavePeek : undefined}>
       <div className="drag-region" />
       <div className="nav">
-        <button className="nav-new" onClick={() => p.onNew()} title="New note in the inbox (⌘N)">New note</button>
-        <button className={p.view === "home" ? "on" : ""} onClick={() => p.onView("home")} title="Today: your note, the inbox, what's left to do">Today</button>
-        <button className={p.view === "inbox" ? "on" : ""} onClick={() => p.onView("inbox")}>
+        <button className="nav-new" onClick={() => onNew()} title="New note in the inbox (⌘N)">New note</button>
+        <button className={p.view === "home" ? "on" : ""} onClick={() => onView("home")} title="Today: your note, the inbox, what's left to do">Today</button>
+        <button className={p.view === "inbox" ? "on" : ""} onClick={() => onView("inbox")}>
           Inbox {inboxCount > 0 && <span className="count">{inboxCount}</span>}
         </button>
-        <button className={p.view === "tasks" ? "on" : ""} onClick={() => p.onView("tasks")}>
+        <button className={p.view === "tasks" ? "on" : ""} onClick={() => onView("tasks")}>
           Tasks {openTasks > 0 && <span className="count">{openTasks}</span>}
         </button>
-        <button className={p.view === "graph" ? "on" : ""} onClick={() => p.onView("graph")} title="How your notes link up (⌥⌘G)">
+        <button className={p.view === "graph" ? "on" : ""} onClick={() => onView("graph")} title="How your notes link up (⌥⌘G)">
           Graph
         </button>
       </div>
@@ -333,7 +345,7 @@ export function Sidebar(p: Props) {
               const n = idx.notes.get(r.path)!;
               const line = n.content.split("\n").find((l) => r.terms.some((t) => l.toLowerCase().includes(t))) ?? "";
               return (
-                <div key={r.path} className="search-hit" onClick={() => p.onOpen(r.path)}>
+                <div key={r.path} className="search-hit" onClick={() => onOpen(r.path)}>
                   <div className="search-name">{n.name}</div>
                   <div className="search-line">{line.trim().slice(0, 140)}</div>
                 </div>
@@ -366,6 +378,11 @@ export function Sidebar(p: Props) {
       }} />}
       <div className="side-foot">
         <button onClick={p.onSettings}>Settings</button>
+        {p.syncLine && (
+          <button className={`sync-state${p.syncError ? " bad" : ""}`} onClick={p.onSyncNow} title={p.syncError ?? "Sync now"}>
+            {p.syncLine}
+          </button>
+        )}
         <button className="rail-fold" onClick={() => p.onFold(!p.folded)} title={p.folded ? "Keep the sidebar open (⇧⌘\\)" : "Fold the sidebar away (⇧⌘\\)"}>
           {p.folded ? "Keep open" : "Fold away"}
         </button>

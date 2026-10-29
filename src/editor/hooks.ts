@@ -33,6 +33,6 @@ const none: EditorHooks = {
 
 export const editorHooks = Facet.define<EditorHooks, EditorHooks>({ combine: (v) => v[0] ?? none });
 
-/** railnote-file:// URL the page can load a vault file from. */
+/** URL the page can load a vault file from: railnote-file:// on desktop, the service worker's vault/ on a phone. */
 export const fileUrl = (path: string, version = 0) =>
-  `railnote-file://vault/${path.split("/").map(encodeURIComponent).join("/")}${version ? `?v=${version}` : ""}`;
+  `${(window as any).railnote?.kind === "phone" ? "vault/" : "railnote-file://vault/"}${path.split("/").map(encodeURIComponent).join("/")}${version ? `?v=${version}` : ""}`;

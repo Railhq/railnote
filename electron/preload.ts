@@ -8,6 +8,7 @@ function listen<T>(channel: string, cb: (e: T) => void) {
 }
 
 const api: HostApi = {
+  kind: "desktop",
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setSettings: (patch) => ipcRenderer.invoke("settings:set", patch),
   chooseVault: () => ipcRenderer.invoke("vault:choose"),
@@ -31,6 +32,11 @@ const api: HostApi = {
   history: (p) => ipcRenderer.invoke("history:list", p),
   readVersion: (p, id) => ipcRenderer.invoke("history:read", p, id),
   restoreVersion: (p, id) => ipcRenderer.invoke("history:restore", p, id),
+  syncStatus: () => ipcRenderer.invoke("sync:status"),
+  turnOnSync: (setup) => ipcRenderer.invoke("sync:on", setup),
+  turnOffSync: () => ipcRenderer.invoke("sync:off"),
+  syncNow: () => ipcRenderer.invoke("sync:now"),
+  onSyncEvent: (cb) => listen("sync:event", cb),
   onVaultEvent: (cb) => listen("vault:event", cb),
   onMenuCommand: (cb) => listen("menu:command", cb),
   ask: (id, q, s) => ipcRenderer.invoke("ai:ask", id, q, s),
