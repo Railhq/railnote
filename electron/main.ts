@@ -41,6 +41,8 @@ const settingsFile = () => path.join(app.getPath("userData"), "settings.json");
 /** Settings plus what only the main process may read: each vault's sync passphrase. */
 let settings: Settings & { sync?: Record<string, SyncConfig> } = { ...DEFAULTS };
 const SKILLS = path.join(__dirname, "skills");
+/** The app icon (build/icon.svg). A packaged app takes build/icon.icns from its bundle instead. */
+const ICON = path.join(__dirname, "..", "build", "icon.png");
 let vault: Vault | undefined;
 let win: BrowserWindow | undefined;
 
@@ -328,6 +330,7 @@ function createWindow() {
     minHeight: 480,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     backgroundColor: "#1e1e1e",
+    icon: ICON,
     show: !process.env.RAILNOTE_HEADLESS,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -347,6 +350,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "darwin" && !app.isPackaged) app.dock?.setIcon(ICON);
   await loadSettings();
   if (process.env.RAILNOTE_VAULT) settings.vaultPath = path.resolve(process.env.RAILNOTE_VAULT);
   registerIpc();

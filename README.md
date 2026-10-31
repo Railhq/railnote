@@ -107,6 +107,7 @@ Set an Anthropic API key in Settings (or `ANTHROPIC_API_KEY`). On a computer the
 npm install
 npm run dev     # Vite + Electron with reload
 npm start       # production build, then run
+npm run package       # Railnote.app in release/, with its name and icon
 npm run build:web     # the phone app (src/web/host.ts stands in for Electron)
 npm run sync-server   # a local sync server on :8787
 ```

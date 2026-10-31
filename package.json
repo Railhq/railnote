@@ -13,7 +13,8 @@
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on tcp:5199 && cross-env RAILNOTE_DEV=1 electron .\"",
     "build:web": "vite build -c vite.web.config.ts",
     "sync-server": "node server/sync-server.mjs",
-    "test:sync": "node test/sync.test.mjs"
+    "test:sync": "node test/sync.test.mjs",
+    "package": "npm run build && node scripts/package-mac.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.136.0",
@@ -32,6 +33,7 @@
     "@codemirror/search": "^6.5.6",
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.26.3",
+    "@electron/packager": "^18.4.4",
     "@lezer/highlight": "^1.2.0",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.66",

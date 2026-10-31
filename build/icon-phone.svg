@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#17302a"/>
+  <!-- the rail: a line with the current stop lit, as on the welcome screen -->
+  <rect x="150" y="96" width="22" height="320" rx="11" fill="#2f5249"/>
+  <rect x="150" y="96" width="22" height="150" rx="11" fill="#f0a202"/>
+  <circle cx="161" cy="246" r="44" fill="#f0a202" stroke="#17302a" stroke-width="16"/>
+  <circle cx="161" cy="140" r="22" fill="#17302a" stroke="#f0a202" stroke-width="10"/>
+  <circle cx="161" cy="372" r="22" fill="#17302a" stroke="#2f5249" stroke-width="10"/>
+  <rect x="236" y="226" width="150" height="16" rx="8" fill="#dce6e1"/>
+  <rect x="236" y="258" width="110" height="16" rx="8" fill="#8fa39b"/>
+  <rect x="236" y="130" width="96" height="12" rx="6" fill="#8fa39b" opacity="0.6"/>
+  <rect x="236" y="366" width="120" height="12" rx="6" fill="#8fa39b" opacity="0.6"/>
+</svg>

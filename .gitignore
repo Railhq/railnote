@@ -6,3 +6,4 @@ dist-electron/
 dist-export/
 dist-web/
 sync-data/
+release/
