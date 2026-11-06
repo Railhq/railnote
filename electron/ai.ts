@@ -51,7 +51,7 @@ export async function ask(
   if (final.stop_reason === "refusal") onDelta("\n\n_Claude declined to answer this one._");
 }
 
-const ORGANIZE_SCHEMA = {
+export const ORGANIZE_SCHEMA = {
   type: "object",
   properties: {
     folder: { type: "string", description: "Existing or new folder path for the note, no leading or trailing slash. Empty string for the vault root." },
@@ -72,8 +72,7 @@ const ORGANIZE_SCHEMA = {
   additionalProperties: false,
 };
 
-export async function organize(apiKey: string | undefined, model: string, req: OrganizeRequest): Promise<OrganizeSuggestion> {
-  const prompt = `Suggest where this note belongs in my vault.
+export const organizePrompt = (req: OrganizeRequest) => `Suggest where this note belongs in my vault.
 
 Existing folders:
 ${req.folders.map((f) => `- ${f || "(root)"}`).join("\n") || "(none)"}
@@ -88,6 +87,19 @@ Prefer existing folders and tags. Only link notes that appear in the list and ar
 <note path="${req.path}">
 ${req.content.slice(0, 20000)}
 </note>`;
+
+/** Keeps a suggestion to notes that exist and tags and folders in the vault's own spelling. */
+export function tidySuggestion(req: OrganizeRequest, out: OrganizeSuggestion): OrganizeSuggestion {
+  const names = new Set(req.noteNames.map((n) => n.toLowerCase()));
+  out.links = (out.links ?? []).filter((l) => names.has(String(l.note).toLowerCase()));
+  out.tags = (out.tags ?? []).map((t) => String(t).replace(/^#/, "").trim().toLowerCase().replace(/\s+/g, "-")).filter(Boolean);
+  out.folder = String(out.folder ?? "").replace(/^\/+|\/+$/g, "");
+  out.summary = String(out.summary ?? "");
+  return out;
+}
+
+export async function organize(apiKey: string | undefined, model: string, req: OrganizeRequest): Promise<OrganizeSuggestion> {
+  const prompt = organizePrompt(req);
   const res = await client(apiKey).beta.messages.create({
     model,
     max_tokens: 16000,
@@ -98,10 +110,5 @@ ${req.content.slice(0, 20000)}
   if (res.stop_reason === "refusal") throw new Error("Claude declined to organize this note.");
   const text = res.content.find((b) => b.type === "text");
   if (!text || text.type !== "text") throw new Error("Claude returned no suggestion.");
-  const out = JSON.parse(text.text) as OrganizeSuggestion;
-  const names = new Set(req.noteNames.map((n) => n.toLowerCase()));
-  out.links = out.links.filter((l) => names.has(l.note.toLowerCase()));
-  out.tags = out.tags.map((t) => t.replace(/^#/, "").trim().toLowerCase().replace(/\s+/g, "-")).filter(Boolean);
-  out.folder = out.folder.replace(/^\/+|\/+$/g, "");
-  return out;
+  return tidySuggestion(req, JSON.parse(text.text) as OrganizeSuggestion);
 }

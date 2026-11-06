@@ -42,6 +42,7 @@ const api: HostApi = {
   ask: (id, q, s) => ipcRenderer.invoke("ai:ask", id, q, s),
   onAskEvent: (cb) => listen("ai:ask:event", cb),
   organize: (req) => ipcRenderer.invoke("ai:organize", req),
+  listAgents: () => ipcRenderer.invoke("ai:agents"),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
 };
 

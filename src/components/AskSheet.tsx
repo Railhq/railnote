@@ -57,7 +57,7 @@ function Ask({ ws, onOpen, onOpenLink, input }: Props & { input: React.RefObject
     const question = q.trim();
     if (!question) return;
     setQ("");
-    // Retrieval stays local: only the best-matching passages of the top notes go to Claude.
+    // Local search picks the likely notes: with an API key only these passages are sent; an agent gets them as hints.
     const hits = ws.index.searchText(question, 8);
     const sources = hits.map((h) => ({ path: h.path, text: excerpt(ws.index.notes.get(h.path)!.content, h.terms) }));
     const id = crypto.randomUUID();
@@ -70,7 +70,7 @@ function Ask({ ws, onOpen, onOpenLink, input }: Props & { input: React.RefObject
       <div className="ask-turns">
         {!turns.length && (
           <div className="empty">
-            Ask anything about your notes. Railnote finds the relevant notes on this machine and sends only those passages to Claude.
+            Ask anything about your notes. Your coding agent (Claude Code, Codex or OpenCode, chosen in Settings) reads the vault on this computer to answer.
           </div>
         )}
         {turns.map((t) => (

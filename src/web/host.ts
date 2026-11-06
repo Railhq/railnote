@@ -240,6 +240,7 @@ export const webHost: HostApi = {
       .catch((err) => askEvents.emit({ id, error: describeError(err), done: true }));
   },
   onAskEvent: askEvents.on,
+  listAgents: async () => [],
   async organize(req) {
     const s = await load();
     try {

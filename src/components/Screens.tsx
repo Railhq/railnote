@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Settings, SyncStatus } from "../../shared/types";
+import type { AgentInfo, AiChoice, Settings, SyncStatus } from "../../shared/types";
 import { host } from "../workspace";
 import type { PluginEntry } from "../plugins/loader";
 
@@ -125,6 +125,16 @@ function DesktopWelcome({ settings, onOpened }: { settings: Settings; onOpened(d
 export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsChanged, onSwitchVault }: { settings: Settings; plugins: PluginEntry[]; onClose(): void; onSaved(s: Settings): void; onPluginsChanged(s: Settings): Promise<void>; onSwitchVault(): void }) {
   const [key, setKey] = useState("");
   const [model, setModel] = useState(settings.model);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [ai, setAi] = useState<AiChoice>(settings.ai ?? "api");
+  const [edits, setEdits] = useState(!!settings.agentEdits);
+  useEffect(() => {
+    host.listAgents().then((list) => {
+      setAgents(list);
+      // With nothing picked yet, show what Railnote will actually use: the first agent installed.
+      if (!settings.ai) setAi(list.find((a) => a.installed)?.id ?? "api");
+    });
+  }, []);
   const [daily, setDaily] = useState(settings.dailyFolder);
   const [inbox, setInbox] = useState(settings.inboxFolder);
   const [templates, setTemplates] = useState(settings.templatesFolder);
@@ -137,6 +147,7 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
   const save = async () => {
     const patch: Partial<Settings> = { model: model.trim() || settings.model, dailyFolder: daily.trim(), inboxFolder: inbox.trim(), templatesFolder: templates.trim(), attachmentsFolder: attachments.trim() };
     if (key) patch.anthropicApiKey = key.trim();
+    if (host.kind !== "phone") Object.assign(patch, { ai, agentEdits: edits });
     onSaved(await host.setSettings(patch));
     onClose();
   };
@@ -144,19 +155,47 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
     <div className="overlay" onMouseDown={onClose}>
       <div className="dialog" onMouseDown={(e) => e.stopPropagation()}>
         <h3>Settings</h3>
-        <h4>Claude</h4>
-        <label className="field">
-          API key {settings.anthropicApiKey ? <span className="muted">(saved; type to replace)</span> : <span className="muted">(or set ANTHROPIC_API_KEY)</span>}
-          <input type="password" value={key} placeholder={settings.anthropicApiKey ? "••••••••" : "sk-ant-…"} onChange={(e) => setKey(e.target.value)} />
-        </label>
-        {settings.anthropicApiKey && (
-          <button className="mini" onClick={async () => { onSaved(await host.setSettings({ anthropicApiKey: "" })); }}>Remove saved key</button>
+        <h4>AI</h4>
+        {host.kind !== "phone" && (
+          <>
+            <label className="field">
+              Ask and Organize use
+              <select value={ai} onChange={(e) => setAi(e.target.value as AiChoice)}>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}{a.installed ? "" : " (not installed)"}</option>
+                ))}
+                <option value="api">Claude with an API key</option>
+              </select>
+            </label>
+            {ai !== "api" && (
+              <>
+                <label className="check">
+                  <input type="checkbox" checked={edits} onChange={(e) => setEdits(e.target.checked)} />
+                  Let the agent create and edit notes when you ask it to
+                </label>
+                <p className="muted small">
+                  The agent runs in your vault folder on this computer and reads your notes itself, on your own {agents.find((a) => a.id === ai)?.name ?? "agent"} plan. No API key needed. Version history keeps whatever it changes.
+                </p>
+              </>
+            )}
+          </>
         )}
-        <label className="field">
-          Model
-          <input value={model} onChange={(e) => setModel(e.target.value)} />
-        </label>
-        <p className="muted small">The key is stored on this machine only, readable by your user account. Ask and Organize send only the passages they need.</p>
+        {(ai === "api" || host.kind === "phone") && (
+          <>
+            <label className="field">
+              API key {settings.anthropicApiKey ? <span className="muted">(saved; type to replace)</span> : <span className="muted">(or set ANTHROPIC_API_KEY)</span>}
+              <input type="password" value={key} placeholder={settings.anthropicApiKey ? "••••••••" : "sk-ant-…"} onChange={(e) => setKey(e.target.value)} />
+            </label>
+            {settings.anthropicApiKey && (
+              <button className="mini" onClick={async () => { onSaved(await host.setSettings({ anthropicApiKey: "" })); }}>Remove saved key</button>
+            )}
+            <label className="field">
+              Model
+              <input value={model} onChange={(e) => setModel(e.target.value)} />
+            </label>
+            <p className="muted small">The key is stored on this {host.kind === "phone" ? "phone" : "machine"} only. Ask and Organize send only the passages they need.</p>
+          </>
+        )}
         <h4>Folders</h4>
         <label className="field">Inbox<input value={inbox} onChange={(e) => setInbox(e.target.value)} /></label>
         <label className="field">Daily notes<input value={daily} onChange={(e) => setDaily(e.target.value)} /></label>

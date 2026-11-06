@@ -32,7 +32,7 @@ Sync keeps a vault the same on every computer and phone you use, through a small
 - **Turning it on.** Settings, Sync: give the server's address and a passphrase. You get a sync link (`https://your-server#<space>`). On another computer, choose **Join from another device** and paste it.
 - **On a phone.** Open the sync link in the phone's browser, enter the passphrase, and your notes come over. Add it to the home screen to use it like an app. The phone keeps the vault in its own storage and works offline; it syncs when you open it and while it's open.
 - **Conflicts.** Edits on two devices to the same note while apart keep both: yours stays, and the other device's text sits beside it as `Note (conflict 2026-10-29).md`. An edit wins over a delete.
-- **What stays local.** Version history is kept per computer (`.railnote/` never syncs). The phone has no version history or PDF export; Ask and Organize work there with an API key set on the phone, which is then stored in the browser.
+- **What stays local.** Version history is kept per computer (`.railnote/` never syncs). The phone has no version history or PDF export; Ask and Organize work there with an API key set on the phone (a computer uses your coding agent instead), which is then stored in the browser.
 
 ### Run a sync server
 
@@ -97,9 +97,19 @@ Vault plugins are off until you allow them: Settings, Plugins, **Allow plugins i
 | ⌥⌘P | Export to PDF |
 | ⌘, | Settings |
 
-## Claude
+## AI: your coding agent, or an API key
 
-Set an Anthropic API key in Settings (or `ANTHROPIC_API_KEY`). On a computer the key is stored in the app's data folder with owner-only permissions and never reaches the page. The default model is `claude-opus-5-5`, changeable in Settings. Requests enable the API's server-side fallback, so a request the primary model declines can be retried by a fallback model.
+On a computer, Ask and Organize run through a coding agent you already use: **Claude Code**, **Codex** or **OpenCode**. Railnote runs the agent's command line in the vault folder, the agent searches and reads the notes itself, and it bills your existing plan, so no API key is needed. Out of the box Railnote uses the first one it finds on your login shell's `PATH` (in that order); pick another in Settings (⌘,).
+
+- **Read-only by default.** Claude Code gets only its Read, Grep and Glob tools, Codex runs with `--sandbox read-only` and OpenCode with its `plan` agent.
+- **Let it edit.** With "Let the agent create and edit notes" on in Settings, you can ask it to write or change notes ("add a summary to the caching note"). Claude Code may then use Edit and Write, Codex runs with `--sandbox workspace-write`, and OpenCode runs with its default agent. Version history keeps what it replaced, so any change can be undone.
+- Agent sessions aren't saved to the agent's history, and Claude Code loads no MCP servers. An answer that takes longer than five minutes is stopped.
+
+The phone can't run an agent, so there Ask and Organize use an API key.
+
+### With an API key
+
+Choose "Claude with an API key" in Settings and set the key (or `ANTHROPIC_API_KEY`). Only the passages Railnote's own search picks are sent. On a computer the key is stored in the app's data folder with owner-only permissions and never reaches the page. The default model is `claude-opus-5-5`, changeable in Settings. Requests enable the API's server-side fallback, so a request the primary model declines can be retried by a fallback model.
 
 ## Develop
 

@@ -5,10 +5,11 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { Readable } from "stream";
-import type { OrganizeRequest, PluginManifest, Settings, AskSource, SyncSetup, SyncStatus } from "../shared/types";
+import type { AgentId, OrganizeRequest, PluginManifest, Settings, AskSource, SyncSetup, SyncStatus } from "../shared/types";
 import type { SyncConfig } from "../shared/sync";
 import { IGNORED, Vault, createStarterVault, installAgentSkills } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
+import { askAgent, defaultAgent, listAgents, organizeWithAgent } from "./agents";
 import { setUpSync, syncVault } from "./sync";
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
@@ -90,6 +91,12 @@ async function open(dir: string) {
   settings.recentVaults = [vault.root, ...settings.recentVaults.filter((v) => v !== vault!.root)].slice(0, 8);
   await saveSettings();
   return files;
+}
+
+/** The agent that answers Ask and Organize, or null for Claude through the API key. */
+async function chosenAgent(): Promise<AgentId | null> {
+  if (settings.ai === "api") return null;
+  return settings.ai ?? (await defaultAgent());
 }
 
 function need(): Vault {
@@ -277,16 +284,20 @@ function registerIpc() {
     await fs.writeFile(target, kind === "pdf" ? await htmlToPdf(html) : html);
     return true;
   });
-  ipcMain.handle("ai:ask", (e, id: string, question: string, sources: AskSource[]) => {
+  ipcMain.handle("ai:agents", () => listAgents());
+  ipcMain.handle("ai:ask", async (e, id: string, question: string, sources: AskSource[]) => {
     const send = (msg: object) => e.sender.send("ai:ask:event", { id, ...msg });
+    const agent = await chosenAgent();
+    const onDelta = (delta: string) => send({ delta });
     // Resolve the invoke right away; the answer streams back as events.
-    ask(settings.anthropicApiKey, settings.model, question, sources, (delta) => send({ delta }))
+    (agent ? askAgent(agent, need().root, question, sources.map((s) => s.path), !!settings.agentEdits, onDelta) : ask(settings.anthropicApiKey, settings.model, question, sources, onDelta))
       .then(() => send({ done: true }))
       .catch((err) => send({ error: describeError(err), done: true }));
   });
   ipcMain.handle("ai:organize", async (_e, req: OrganizeRequest) => {
+    const agent = await chosenAgent();
     try {
-      return await organize(settings.anthropicApiKey, settings.model, req);
+      return agent ? await organizeWithAgent(agent, need().root, req) : await organize(settings.anthropicApiKey, settings.model, req);
     } catch (err) {
       throw new Error(describeError(err));
     }

@@ -25,6 +25,10 @@ export interface Settings {
   recentVaults: string[];
   anthropicApiKey?: string;
   model: string;
+  /** What answers Ask and Organize: a coding agent on this computer, or Claude through an API key. Unset means the first agent installed. */
+  ai?: AiChoice;
+  /** Whether the agent may create and edit notes from Ask. Off by default. */
+  agentEdits?: boolean;
   dailyFolder: string;
   inboxFolder: string;
   templatesFolder: string;
@@ -34,6 +38,15 @@ export interface Settings {
   plugins?: Record<string, boolean>;
   /** Vaults whose own plugins may run. Code in a vault you didn't write could do anything Railnote can. */
   trustedVaults?: string[];
+}
+
+export type AgentId = "claude" | "codex" | "opencode";
+export type AiChoice = AgentId | "api";
+
+export interface AgentInfo {
+  id: AgentId;
+  name: string;
+  installed: boolean;
 }
 
 export interface AskSource {
@@ -153,5 +166,7 @@ export interface HostApi {
   ask(id: string, question: string, sources: AskSource[]): Promise<void>;
   onAskEvent(cb: (e: { id: string; delta?: string; done?: boolean; error?: string }) => void): () => void;
   organize(req: OrganizeRequest): Promise<OrganizeSuggestion>;
+  /** Coding agents Railnote can use, and whether each is installed. None on the phone. */
+  listAgents(): Promise<AgentInfo[]>;
   openExternal(url: string): Promise<void>;
 }
