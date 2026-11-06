@@ -128,6 +128,7 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [ai, setAi] = useState<AiChoice>(settings.ai ?? "api");
   const [edits, setEdits] = useState(!!settings.agentEdits);
+  const [agentModel, setAgentModel] = useState(settings.agentModel ?? "");
   useEffect(() => {
     host.listAgents().then((list) => {
       setAgents(list);
@@ -147,7 +148,7 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
   const save = async () => {
     const patch: Partial<Settings> = { model: model.trim() || settings.model, dailyFolder: daily.trim(), inboxFolder: inbox.trim(), templatesFolder: templates.trim(), attachmentsFolder: attachments.trim() };
     if (key) patch.anthropicApiKey = key.trim();
-    if (host.kind !== "phone") Object.assign(patch, { ai, agentEdits: edits });
+    if (host.kind !== "phone") Object.assign(patch, { ai, agentEdits: edits, agentModel: agentModel.trim() });
     onSaved(await host.setSettings(patch));
     onClose();
   };
@@ -169,6 +170,10 @@ export function SettingsDialog({ settings, plugins, onClose, onSaved, onPluginsC
             </label>
             {ai !== "api" && (
               <>
+                <label className="field">
+                  Agent model <span className="muted">(blank uses the agent's own default)</span>
+                  <input value={agentModel} placeholder={ai === "codex" ? "gpt-5.6-sol" : ai === "claude" ? "opus, sonnet…" : "provider/model"} onChange={(e) => setAgentModel(e.target.value)} />
+                </label>
                 <label className="check">
                   <input type="checkbox" checked={edits} onChange={(e) => setEdits(e.target.checked)} />
                   Let the agent create and edit notes when you ask it to

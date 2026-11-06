@@ -29,6 +29,8 @@ export interface Settings {
   ai?: AiChoice;
   /** Whether the agent may create and edit notes from Ask. Off by default. */
   agentEdits?: boolean;
+  /** Model passed to the agent; empty uses the agent's own default. */
+  agentModel?: string;
   dailyFolder: string;
   inboxFolder: string;
   templatesFolder: string;

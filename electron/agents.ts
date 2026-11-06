@@ -64,6 +64,8 @@ interface RunOptions {
   onText?: (delta: string) => void;
   /** Claude Code only: the JSON schema its final answer must match. */
   schema?: object;
+  /** The agent's model, when not its own default. */
+  model?: string;
 }
 
 function args(id: AgentId, cwd: string, prompt: string, o: RunOptions): string[] {
@@ -78,14 +80,15 @@ function args(id: AgentId, cwd: string, prompt: string, o: RunOptions): string[]
         "--permission-mode", o.edit ? "acceptEdits" : "default",
         "--no-session-persistence", "--strict-mcp-config",
         ...(o.schema ? ["--json-schema", JSON.stringify(o.schema)] : []),
+        ...(o.model ? ["--model", o.model] : []),
       ];
     }
     case "codex":
       // Codex has no system prompt flag here; the instructions lead the prompt instead.
-      return ["exec", "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", o.edit ? "workspace-write" : "read-only", "-C", cwd, `${o.system}\n\n${prompt}`];
+      return ["exec", ...(o.model ? ["-m", o.model] : []), "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", o.edit ? "workspace-write" : "read-only", "-C", cwd, `${o.system}\n\n${prompt}`];
     case "opencode":
       // The plan agent can read and search but not change files.
-      return ["run", "--format", "json", "--dir", cwd, ...(o.edit ? [] : ["--agent", "plan"]), `${o.system}\n\n${prompt}`];
+      return ["run", ...(o.model ? ["-m", o.model] : []), "--format", "json", "--dir", cwd, ...(o.edit ? [] : ["--agent", "plan"]), `${o.system}\n\n${prompt}`];
   }
 }
 
@@ -162,7 +165,11 @@ export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunO
     child.on("close", (c) => (clearTimeout(timer), resolve(c)));
   });
   await read;
-  if (failure) throw new Error(`${agentName(id)}: ${failure}`);
+  if (failure) {
+    if (/requires a newer version of Codex/.test(failure)) failure += ` (Railnote runs ${bin}; update it with \`npm i -g @openai/codex\`.)`;
+    else if (/not supported when using Codex with a ChatGPT account/.test(failure)) failure += " Set a model your plan includes, such as gpt-5.6-sol, under Agent model in Settings (⌘,).";
+    throw new Error(`${agentName(id)}: ${failure}`);
+  }
   if (code !== 0 && !text) {
     const last = stderr.trim().split("\n").filter((l) => !/^Restored session/.test(l)).pop();
     throw new Error(`${agentName(id)} stopped (exit ${code})${last ? `: ${last}` : "."}`);
@@ -176,17 +183,17 @@ If the notes don't contain the answer, say so plainly and suggest what note migh
 ${edit ? "You may create and edit notes when the user asks you to; say which notes you changed." : "Don't change any files; this is read-only."}
 Keep answers short and concrete. Use Markdown. Don't narrate your searching.`;
 
-export async function askAgent(id: AgentId, vault: string, question: string, hints: string[], edit: boolean, onText: (t: string) => void) {
+export async function askAgent(id: AgentId, vault: string, question: string, hints: string[], edit: boolean, model: string | undefined, onText: (t: string) => void) {
   const prompt = hints.length ? `${question}\n\n(Railnote's own search suggests these notes may be relevant: ${hints.join(", ")})` : question;
-  await runAgent(id, vault, prompt, { edit, system: ASK_SYSTEM(edit), onText });
+  await runAgent(id, vault, prompt, { edit, system: ASK_SYSTEM(edit), onText, model });
 }
 
 const ORGANIZE_SYSTEM = `You are filing a note inside Railnote, a Markdown notes app. The current directory is the user's notes vault.
 Don't change any files. Reply with only a JSON object, no prose and no code fence, matching this schema:
 ${JSON.stringify(ORGANIZE_SCHEMA)}`;
 
-export async function organizeWithAgent(id: AgentId, vault: string, req: OrganizeRequest): Promise<OrganizeSuggestion> {
-  const { text, structured } = await runAgent(id, vault, organizePrompt(req), { edit: false, system: ORGANIZE_SYSTEM, schema: id === "claude" ? ORGANIZE_SCHEMA : undefined });
+export async function organizeWithAgent(id: AgentId, vault: string, req: OrganizeRequest, model?: string): Promise<OrganizeSuggestion> {
+  const { text, structured } = await runAgent(id, vault, organizePrompt(req), { edit: false, model, system: ORGANIZE_SYSTEM, schema: id === "claude" ? ORGANIZE_SCHEMA : undefined });
   let out = structured as OrganizeSuggestion | undefined;
   if (!out || typeof out !== "object") {
     const json = /\{[\s\S]*\}/.exec(text)?.[0];

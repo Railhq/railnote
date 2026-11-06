@@ -290,14 +290,14 @@ function registerIpc() {
     const agent = await chosenAgent();
     const onDelta = (delta: string) => send({ delta });
     // Resolve the invoke right away; the answer streams back as events.
-    (agent ? askAgent(agent, need().root, question, sources.map((s) => s.path), !!settings.agentEdits, onDelta) : ask(settings.anthropicApiKey, settings.model, question, sources, onDelta))
+    (agent ? askAgent(agent, need().root, question, sources.map((s) => s.path), !!settings.agentEdits, settings.agentModel || undefined, onDelta) : ask(settings.anthropicApiKey, settings.model, question, sources, onDelta))
       .then(() => send({ done: true }))
       .catch((err) => send({ error: describeError(err), done: true }));
   });
   ipcMain.handle("ai:organize", async (_e, req: OrganizeRequest) => {
     const agent = await chosenAgent();
     try {
-      return agent ? await organizeWithAgent(agent, need().root, req) : await organize(settings.anthropicApiKey, settings.model, req);
+      return agent ? await organizeWithAgent(agent, need().root, req, settings.agentModel || undefined) : await organize(settings.anthropicApiKey, settings.model, req);
     } catch (err) {
       throw new Error(describeError(err));
     }
