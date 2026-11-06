@@ -11,6 +11,7 @@ import { IGNORED, Vault, createStarterVault, installAgentSkills } from "./vault"
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
 import { askAgent, defaultAgent, listAgents, organizeWithAgent } from "./agents";
 import { setUpSync, syncVault } from "./sync";
+import { updateElectronApp } from "update-electron-app";
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
 
@@ -368,6 +369,9 @@ app.whenReady().then(async () => {
   buildMenu();
   servePlugins();
   serveFiles();
+  // Released builds check GitHub Releases (through update.electronjs.org) and offer to restart
+  // into a new version. It needs a Developer ID signature; an ad hoc build just logs the failure.
+  if (app.isPackaged) updateElectronApp({ repo: "Railhq/railnote" });
   createWindow();
   app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });

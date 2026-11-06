@@ -4,6 +4,12 @@ Open-source Markdown notes that work the moment you open them.
 
 Railnote keeps the part of Obsidian people love (a folder of plain `.md` files you own) and fixes the parts they complain about: the setup, the plugin hunt, the filing paralysis, and the missing AI. It opens an existing Obsidian vault as is.
 
+Railnote is free and MIT licensed, with no account.
+
+## Download
+
+macOS 13 or later: get the `.dmg` for your Mac (Apple silicon `arm64`, or Intel `x64`) from [Releases](https://github.com/Railhq/railnote/releases), open it and drag Railnote into Applications. It updates itself from new releases.
+
 ## What it fixes
 
 | Common complaint | What Railnote does |
@@ -26,7 +32,7 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 
 ## Sync and your phone
 
-Sync keeps a vault the same on every computer and phone you use, through a small server you run yourself (`server/sync-server.mjs`, plain Node, no dependencies).
+Sync keeps a vault the same on every computer and phone you use, through a small server: run your own (`server/sync-server.mjs`, plain Node, no dependencies) or use the free one at `https://sync.getrailhq.com`.
 
 - **End-to-end encrypted.** Each device turns your passphrase into the keys, then encrypts every file and its name before it leaves. The server stores numbered, unreadable blobs: it knows how many files there are, how big they are and when they change, nothing else. Nobody can recover the passphrase, the server included.
 - **Turning it on.** Settings, Sync: give the server's address and a passphrase. You get a sync link (`https://your-server#<space>`). On another computer, choose **Join from another device** and paste it.
@@ -118,6 +124,7 @@ npm install
 npm run dev     # Vite + Electron with reload
 npm start       # production build, then run
 npm run package       # Railnote.app in release/, with its name and icon
+npm run release:mac   # the release downloads: a .dmg and an update .zip for arm64 and x64
 npm run build:web     # the phone app (src/web/host.ts stands in for Electron)
 npm run sync-server   # a local sync server on :8787
 ```
@@ -125,6 +132,8 @@ npm run sync-server   # a local sync server on :8787
 Explainers play through [`@opencanviz/player`](https://www.npmjs.com/package/@opencanviz/player) from npm.
 
 The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`. The desktop host is the Electron preload; the phone host is `src/web/host.ts`, which keeps the vault in IndexedDB. Both sync through `shared/sync.ts`.
+
+A signed, notarized release needs a Developer ID Application certificate in the keychain and these set when running `release:mac`: `APPLE_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Upload the `.dmg` and `.zip` files to a GitHub release named for the version (`v0.1.0`); installed apps find it through update.electronjs.org.
 
 ## License
 
