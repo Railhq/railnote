@@ -45,8 +45,10 @@ jobs:
           Get-Process railnote -ErrorAction SilentlyContinue | Stop-Process -Force
           $exe = Get-ChildItem "$env:LOCALAPPDATA\railnote\app-*\railnote.exe"
           if (-not $exe) { throw "the installer didn't install railnote.exe" }
-          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Railnote.lnk")) { throw "no Start menu shortcut" }
           "Installed $($exe.FullName)"
+          $lnk = Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter *.lnk | Where-Object Name -like "Railnote*"
+          if (-not $lnk) { throw "no Start menu shortcut" }
+          "Start menu: $($lnk.FullName)"
 
       - uses: actions/upload-artifact@v4
         with:
