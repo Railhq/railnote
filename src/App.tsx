@@ -19,6 +19,7 @@ import { SourceView } from "./components/SourceView";
 import { NotePane, PaneHandle } from "./components/NotePane";
 import { GraphView } from "./components/GraphView";
 import { exportNote, type ExportKind } from "./export/export";
+import { keys } from "../shared/keys";
 
 type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string } | { history: string };
 
@@ -491,7 +492,7 @@ export function App() {
                       </div>
                     ))}
                     {!split && i === 0 && current && (
-                      <button className="tab-split" title="Open this note to the side (⌘\)" aria-label="Split view" onClick={() => void toggleSplit()}>
+                      <button className="tab-split" title={keys("Open this note to the side (⌘\\)")} aria-label="Split view" onClick={() => void toggleSplit()}>
                         <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" /><path d="M8 2.5v11" stroke="currentColor" /></svg>
                       </button>
                     )}
@@ -522,7 +523,7 @@ export function App() {
                     <div className="empty-main">
                       <p>No note open.</p>
                       <button onClick={() => newNote()}>New note</button> <button onClick={daily}>Today's note</button>
-                      <p className="muted small">Press ⌘K to jump to any note, or ⌘P for every command.</p>
+                      <p className="muted small">{keys("Press ⌘K to jump to any note, or ⌘P for every command.")}</p>
                     </div>
                   )}
                 </section>

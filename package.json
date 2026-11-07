@@ -1,6 +1,6 @@
 {
   "name": "railnote",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Open-source Markdown notes that work out of the box",
   "license": "MIT",
   "main": "dist-electron/main.js",
@@ -15,7 +15,8 @@
     "sync-server": "node server/sync-server.mjs",
     "test:sync": "node test/sync.test.mjs",
     "package": "npm run build && node scripts/package-mac.mjs",
-    "release:mac": "npm run build && node scripts/package-mac.mjs --release"
+    "release:mac": "npm run build && node scripts/package-mac.mjs --release",
+    "release:linux": "npm run build && node scripts/package-linux.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.136.0",

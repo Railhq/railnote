@@ -9,6 +9,7 @@ import path from "path";
 import readline from "readline";
 import type { AgentId, AgentInfo, OrganizeRequest, OrganizeSuggestion } from "../shared/types";
 import { ORGANIZE_SCHEMA, organizePrompt, tidySuggestion } from "./ai";
+import { keys } from "../shared/keys";
 
 const AGENTS: { id: AgentId; name: string; bin: string }[] = [
   { id: "claude", name: "Claude Code", bin: "claude" },
@@ -113,7 +114,7 @@ function message(raw: unknown): string {
  */
 export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunOptions): Promise<{ text: string; structured?: unknown }> {
   const bin = await which(AGENTS.find((a) => a.id === id)!.bin);
-  if (!bin) throw new Error(`${agentName(id)} isn't installed, or isn't on your PATH. Install it or pick another agent in Settings (⌘,).`);
+  if (!bin) throw new Error(`${agentName(id)} isn't installed, or isn't on your PATH. Install it or pick another agent in ${keys("Settings (⌘,)")}.`);
   const child = spawn(bin, args(id, cwd, prompt, o), { cwd, env: { ...process.env, PATH: await userPath() }, stdio: ["ignore", "pipe", "pipe"] });
   let text = "";
   let structured: unknown;
@@ -167,7 +168,7 @@ export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunO
   await read;
   if (failure) {
     if (/requires a newer version of Codex/.test(failure)) failure += ` (Railnote runs ${bin}; update it with \`npm i -g @openai/codex\`.)`;
-    else if (/not supported when using Codex with a ChatGPT account/.test(failure)) failure += " Set a model your plan includes, such as gpt-5.6-sol, under Agent model in Settings (⌘,).";
+    else if (/not supported when using Codex with a ChatGPT account/.test(failure)) failure += ` Set a model your plan includes, such as gpt-5.6-sol, under Agent model in ${keys("Settings (⌘,)")}.`;
     throw new Error(`${agentName(id)}: ${failure}`);
   }
   if (code !== 0 && !text) {

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AskSource, OrganizeRequest, OrganizeSuggestion } from "../shared/types";
+import { keys } from "../shared/keys";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
@@ -17,7 +18,7 @@ export function describeError(e: unknown): string {
   if (e instanceof Anthropic.RateLimitError) return "Rate limited by the Claude API. Try again in a minute.";
   if (e instanceof Anthropic.APIError) return `Claude API error ${e.status ?? ""}: ${e.message}`;
   const msg = (e as Error)?.message ?? String(e);
-  if (/Could not resolve authentication method/.test(msg)) return "Add your Anthropic API key in Settings (⌘,) to use Ask and Organize.";
+  if (/Could not resolve authentication method/.test(msg)) return `Add your Anthropic API key in ${keys("Settings (⌘,)")} to use Ask and Organize.`;
   return msg;
 }
 

@@ -10,6 +10,8 @@ Railnote is free and MIT licensed, with no account.
 
 macOS 13 or later: get the `.dmg` for your Mac (Apple silicon `arm64`, or Intel `x64`) from [Releases](https://github.com/Railhq/railnote/releases), open it and drag Railnote into Applications. It updates itself from new releases.
 
+Linux (x64 or arm64): the `.AppImage` runs on most distributions (`chmod +x` it, then run it), and the `.deb` installs on Debian and Ubuntu (`sudo apt install ./railnote_*.deb`) with a menu entry and a `railnote` command. On Linux, download new releases yourself.
+
 ## What it fixes
 
 | Common complaint | What Railnote does |
@@ -125,6 +127,7 @@ npm run dev     # Vite + Electron with reload
 npm start       # production build, then run
 npm run package       # Railnote.app in release/, with its name and icon
 npm run release:mac   # the release downloads: a .dmg and an update .zip for arm64 and x64
+npm run release:linux # an .AppImage and a .deb for x64 and arm64 (made in Docker off Linux)
 npm run build:web     # the phone app (src/web/host.ts stands in for Electron)
 npm run sync-server   # a local sync server on :8787
 ```
@@ -133,7 +136,7 @@ Explainers play through [`@opencanviz/player`](https://www.npmjs.com/package/@op
 
 The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`. The desktop host is the Electron preload; the phone host is `src/web/host.ts`, which keeps the vault in IndexedDB. Both sync through `shared/sync.ts`.
 
-A signed, notarized release needs a Developer ID Application certificate in the keychain and, when running `release:mac`, `APPLE_SIGN_IDENTITY` set to it and `APPLE_KEYCHAIN_PROFILE` set to a profile saved with `xcrun notarytool store-credentials`. Upload the `.dmg` and `.zip` files to a GitHub release named for the version (`v0.1.0`); installed apps find it through update.electronjs.org.
+A signed, notarized release needs a Developer ID Application certificate in the keychain and, when running `release:mac`, `APPLE_SIGN_IDENTITY` set to it and `APPLE_KEYCHAIN_PROFILE` set to a profile saved with `xcrun notarytool store-credentials`. Upload the `.dmg` and `.zip` files, and the Linux `.AppImage` and `.deb` files, to a GitHub release named for the version (`v0.1.0`); installed apps find it through update.electronjs.org.
 
 ## License
 

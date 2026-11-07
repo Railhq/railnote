@@ -371,7 +371,8 @@ app.whenReady().then(async () => {
   serveFiles();
   // Released builds check GitHub Releases (through update.electronjs.org) and offer to restart
   // into a new version. It needs a Developer ID signature; an ad hoc build just logs the failure.
-  if (app.isPackaged) updateElectronApp({ repo: "Railhq/railnote" });
+  // Electron can't update itself on Linux, where a new AppImage or .deb is downloaded instead.
+  if (app.isPackaged && process.platform !== "linux") updateElectronApp({ repo: "Railhq/railnote" });
   createWindow();
   app.on("activate", () => BrowserWindow.getAllWindows().length === 0 && createWindow());
 });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { keys } from "../../shared/keys";
 
 export interface PaletteItem {
   id: string;
@@ -49,7 +50,7 @@ export function Palette(props: { placeholder: string; items: (query: string) => 
           {items.map((it, i) => (
             <div key={it.id} className={`palette-item${i === at ? " sel" : ""}`} onMouseMove={() => i !== at && setSel(i)} onClick={() => choose(i)}>
               <span>{it.label}</span>
-              {it.hint && <span className="hint">{it.hint}</span>}
+              {it.hint && <span className="hint">{keys(it.hint)}</span>}
             </div>
           ))}
           {!items.length && <div className="palette-empty">No matches</div>}

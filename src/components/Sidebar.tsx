@@ -3,6 +3,7 @@ import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
 import { folderLines, lineColour } from "../lib/lines";
+import { keys } from "../../shared/keys";
 
 export type MainView = "home" | "note" | "tasks" | "inbox" | "source" | "graph";
 
@@ -276,7 +277,7 @@ export function Sidebar(p: Props) {
   const slim = (
     <aside className="sidebar slim" aria-label="Sidebar, folded" onMouseLeave={() => peek && !p.narrow && leavePeek()}>
       <div className="drag-region" />
-      <button className="slim-new" onClick={() => onNew()} title="New note in the inbox (⌘N)" aria-label="New note">+</button>
+      <button className="slim-new" onClick={() => onNew()} title={keys("New note in the inbox (⌘N)")} aria-label="New note">+</button>
       <button className={`slim-btn${p.view === "home" ? " on" : ""}`} onClick={() => onView("home")} title="Today" aria-label="Today">
         <span className="slim-day">{today.getDate()}</span>
       </button>
@@ -288,7 +289,7 @@ export function Sidebar(p: Props) {
         <svg viewBox="0 0 20 20"><rect x="3.5" y="3.5" width="13" height="13" rx="3" /><path d="m7 10 2.2 2.2L13.5 8" /></svg>
         {openTasks > 0 && <span className="slim-badge">{openTasks}</span>}
       </button>
-      <button className={`slim-btn${p.view === "graph" ? " on" : ""}`} onClick={() => onView("graph")} title="Graph (⌥⌘G)" aria-label="Graph">
+      <button className={`slim-btn${p.view === "graph" ? " on" : ""}`} onClick={() => onView("graph")} title={keys("Graph (⌥⌘G)")} aria-label="Graph">
         <svg viewBox="0 0 20 20"><path d="M4 15 9 10h7" /><circle cx="4" cy="15" r="2" /><circle cx="9.5" cy="10" r="2" /><circle cx="16" cy="10" r="2" /></svg>
       </button>
       {/* The folders as a strip of line colours; pointing at it opens the full map of notes. */}
@@ -296,10 +297,10 @@ export function Sidebar(p: Props) {
         {lines.map((l) => <i key={l} style={{ background: lineColour(lines, l + "/") }} title={l} />)}
       </button>
       <div className="slim-foot">
-        <button className="slim-btn" onClick={p.onSettings} title="Settings (⌘,)" aria-label="Settings">
+        <button className="slim-btn" onClick={p.onSettings} title={keys("Settings (⌘,)")} aria-label="Settings">
           <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.6" /><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" /></svg>
         </button>
-        <button className="slim-btn rail-unfold" onClick={() => p.onFold(false)} title="Keep the sidebar open (⇧⌘\)" aria-label="Keep the sidebar open">
+        <button className="slim-btn rail-unfold" onClick={() => p.onFold(false)} title={keys("Keep the sidebar open (⇧⌘\\)")} aria-label="Keep the sidebar open">
           <svg viewBox="0 0 20 20"><path d="m8 5 5 5-5 5" /></svg>
         </button>
       </div>
@@ -313,7 +314,7 @@ export function Sidebar(p: Props) {
     <aside className={`sidebar${p.folded ? " peek" : ""}`} onMouseEnter={stayPut} onMouseLeave={p.folded && !p.narrow ? leavePeek : undefined}>
       <div className="drag-region" />
       <div className="nav">
-        <button className="nav-new" onClick={() => onNew()} title="New note in the inbox (⌘N)">New note</button>
+        <button className="nav-new" onClick={() => onNew()} title={keys("New note in the inbox (⌘N)")}>New note</button>
         <button className={p.view === "home" ? "on" : ""} onClick={() => onView("home")} title="Today: your note, the inbox, what's left to do">Today</button>
         <button className={p.view === "inbox" ? "on" : ""} onClick={() => onView("inbox")}>
           Inbox {inboxCount > 0 && <span className="count">{inboxCount}</span>}
@@ -321,7 +322,7 @@ export function Sidebar(p: Props) {
         <button className={p.view === "tasks" ? "on" : ""} onClick={() => onView("tasks")}>
           Tasks {openTasks > 0 && <span className="count">{openTasks}</span>}
         </button>
-        <button className={p.view === "graph" ? "on" : ""} onClick={() => onView("graph")} title="How your notes link up (⌥⌘G)">
+        <button className={p.view === "graph" ? "on" : ""} onClick={() => onView("graph")} title={keys("How your notes link up (⌥⌘G)")}>
           Graph
         </button>
       </div>
@@ -383,7 +384,7 @@ export function Sidebar(p: Props) {
             {p.syncLine}
           </button>
         )}
-        <button className="rail-fold" onClick={() => p.onFold(!p.folded)} title={p.folded ? "Keep the sidebar open (⇧⌘\\)" : "Fold the sidebar away (⇧⌘\\)"}>
+        <button className="rail-fold" onClick={() => p.onFold(!p.folded)} title={keys(p.folded ? "Keep the sidebar open (⇧⌘\\)" : "Fold the sidebar away (⇧⌘\\)")}>
           {p.folded ? "Keep open" : "Fold away"}
         </button>
       </div>

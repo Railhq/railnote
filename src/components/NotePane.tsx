@@ -10,6 +10,7 @@ import { extOf, fileName, isMedia, noteFolder } from "../lib/vault-index";
 import { Connections } from "./Connections";
 import { OutlineRail } from "./OutlineRail";
 import { host, type Workspace } from "../workspace";
+import { keys } from "../../shared/keys";
 
 /** What the app asks of an open note: save it now, jump to a line, type into it. */
 export interface PaneHandle {
@@ -194,8 +195,8 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
           {title && title.text !== note.name && <span className="crumb-file">{note.name}.md</span>}
         </span>
         <span className="note-actions">
-          <button className="ghost" title="Saved versions of this note (⇧⌘H)" onClick={() => p.onHistory(path)}>History</button>
-          <button className="ghost" title="Ask Claude where this note belongs (⇧⌘O)" onClick={() => p.onOrganize(path)}>Organize</button>
+          <button className="ghost" title={keys("Saved versions of this note (⇧⌘H)")} onClick={() => p.onHistory(path)}>History</button>
+          <button className="ghost" title={keys("Ask Claude where this note belongs (⇧⌘O)")} onClick={() => p.onOrganize(path)}>Organize</button>
         </span>
       </div>
       {!title && (
