@@ -1,0 +1,54 @@
+# Builds the Windows installer on GitHub's Windows machines, checks that the app starts and that the
+# installer installs it, and keeps the files as a run artifact to attach to a release.
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run release:win
+
+      - name: Start the app on a sample vault and take a screenshot
+        shell: pwsh
+        run: |
+          $vault = "$env:RUNNER_TEMP\vault"
+          New-Item -ItemType Directory -Force $vault | Out-Null
+          Set-Content "$vault\Welcome.md" "# Railnote on Windows`n`nPress Ctrl+K to jump to a note."
+          $env:RAILNOTE_VAULT = $vault
+          $app = Start-Process release\Railnote-win32-x64\railnote.exe -PassThru
+          Start-Sleep 25
+          if ($app.HasExited) { throw "Railnote quit with exit code $($app.ExitCode)" }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("release\win-x64\screenshot.png")
+          Stop-Process -Id $app.Id -Force
+
+      - name: Install with the setup program
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem release\win-x64\*-setup.exe
+          Start-Process $setup.FullName -ArgumentList "--silent" -Wait
+          Start-Sleep 10
+          Get-Process railnote -ErrorAction SilentlyContinue | Stop-Process -Force
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\railnote\app-*\railnote.exe"
+          if (-not $exe) { throw "the installer didn't install railnote.exe" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Railnote.lnk")) { throw "no Start menu shortcut" }
+          "Installed $($exe.FullName)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: railnote-windows
+          path: release/win-x64/

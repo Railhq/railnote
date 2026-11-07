@@ -21,10 +21,13 @@ const AGENTS: { id: AgentId; name: string; bin: string }[] = [
 const TIMEOUT = 5 * 60_000;
 
 let shellPath: Promise<string> | undefined;
+const win = process.platform === "win32";
 
 /** An app opened from the Dock gets a bare PATH; the user's login shell knows where the agents live. */
 function userPath(): Promise<string> {
   return (shellPath ??= new Promise((resolve) => {
+    // Windows apps get the user's full PATH already, and there's no login shell to ask.
+    if (win) return resolve([process.env.PATH || "", path.join(process.env.USERPROFILE || "", ".local", "bin")].join(path.delimiter));
     const shell = process.env.SHELL || "/bin/zsh";
     execFile(shell, ["-ilc", 'printf "\\n__RAILNOTE_PATH__%s" "$PATH"'], { timeout: 10_000 }, (_err, out) => {
       const found = /__RAILNOTE_PATH__(.*)$/m.exec(String(out ?? ""))?.[1];
@@ -34,16 +37,34 @@ function userPath(): Promise<string> {
   }));
 }
 
+/** On Windows a command is a file with one of PATHEXT's extensions, such as claude.exe or codex.cmd. */
+const EXTS = win ? (process.env.PATHEXT || ".EXE;.CMD;.BAT").split(";").filter((e) => /^\.(exe|cmd|bat)$/i.test(e)) : [""];
+
 async function which(bin: string): Promise<string | null> {
-  for (const dir of (await userPath()).split(":")) {
+  for (const dir of (await userPath()).split(path.delimiter)) {
     if (!dir) continue;
-    const p = path.join(dir, bin);
-    try {
-      await fs.access(p, fs.constants.X_OK);
-      return p;
-    } catch {}
+    for (const ext of EXTS) {
+      const p = path.join(dir, bin + ext);
+      try {
+        await fs.access(p, fs.constants.X_OK);
+        return p;
+      } catch {}
+    }
   }
   return null;
+}
+
+/**
+ * Node won't start a .cmd file without a shell, and a shell would mangle the prompt. npm installs
+ * agents on Windows as a .cmd that runs node on a script, so Railnote runs that script itself.
+ */
+async function command(bin: string): Promise<[string, string[]]> {
+  if (!/\.(cmd|bat)$/i.test(bin)) return [bin, []];
+  const script = /"%dp0%\\([^"]+)"/.exec(await fs.readFile(bin, "utf8"))?.[1];
+  if (!script) throw new Error(`Railnote can't run ${bin}. Install the agent with its own installer, which makes an .exe.`);
+  const node = path.join(path.dirname(bin), "node.exe");
+  const local = await fs.access(node).then(() => true, () => false);
+  return [local ? node : (await which("node")) ?? "node", [path.join(path.dirname(bin), script)]];
 }
 
 export async function listAgents(): Promise<AgentInfo[]> {
@@ -73,8 +94,9 @@ function args(id: AgentId, cwd: string, prompt: string, o: RunOptions): string[]
   switch (id) {
     case "claude": {
       const tools = o.edit ? ["Read", "Grep", "Glob", "Edit", "Write"] : ["Read", "Grep", "Glob"];
+      // The prompt goes in on stdin: a long one would overflow a Windows command line.
       return [
-        "-p", prompt,
+        "-p",
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         "--append-system-prompt", o.system,
         "--tools", tools.join(","), "--allowedTools", tools.join(","),
@@ -86,7 +108,7 @@ function args(id: AgentId, cwd: string, prompt: string, o: RunOptions): string[]
     }
     case "codex":
       // Codex has no system prompt flag here; the instructions lead the prompt instead.
-      return ["exec", ...(o.model ? ["-m", o.model] : []), "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", o.edit ? "workspace-write" : "read-only", "-C", cwd, `${o.system}\n\n${prompt}`];
+      return ["exec", ...(o.model ? ["-m", o.model] : []), "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", o.edit ? "workspace-write" : "read-only", "-C", cwd, "-"];
     case "opencode":
       // The plan agent can read and search but not change files.
       return ["run", ...(o.model ? ["-m", o.model] : []), "--format", "json", "--dir", cwd, ...(o.edit ? [] : ["--agent", "plan"]), `${o.system}\n\n${prompt}`];
@@ -115,7 +137,10 @@ function message(raw: unknown): string {
 export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunOptions): Promise<{ text: string; structured?: unknown }> {
   const bin = await which(AGENTS.find((a) => a.id === id)!.bin);
   if (!bin) throw new Error(`${agentName(id)} isn't installed, or isn't on your PATH. Install it or pick another agent in ${keys("Settings (⌘,)")}.`);
-  const child = spawn(bin, args(id, cwd, prompt, o), { cwd, env: { ...process.env, PATH: await userPath() }, stdio: ["ignore", "pipe", "pipe"] });
+  const [exe, pre] = await command(bin);
+  const child = spawn(exe, [...pre, ...args(id, cwd, prompt, o)], { cwd, env: { ...process.env, PATH: await userPath() }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  child.stdin.on("error", () => {});
+  child.stdin.end(id === "claude" ? prompt : id === "codex" ? `${o.system}\n\n${prompt}` : "");
   let text = "";
   let structured: unknown;
   let failure: string | undefined;

@@ -12,6 +12,11 @@ import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
 import { askAgent, defaultAgent, listAgents, organizeWithAgent } from "./agents";
 import { setUpSync, syncVault } from "./sync";
 import { updateElectronApp } from "update-electron-app";
+import squirrelStartup from "electron-squirrel-startup";
+
+// The Windows installer starts the app to add its shortcuts (and the uninstaller to remove them);
+// those runs do that and quit.
+if (squirrelStartup) app.quit();
 
 if (process.env.RAILNOTE_USER_DATA) app.setPath("userData", process.env.RAILNOTE_USER_DATA);
 

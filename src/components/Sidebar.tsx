@@ -3,7 +3,7 @@ import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
 import { folderLines, lineColour } from "../lib/lines";
-import { keys } from "../../shared/keys";
+import { fileManager, keys } from "../../shared/keys";
 
 export type MainView = "home" | "note" | "tasks" | "inbox" | "source" | "graph";
 
@@ -261,7 +261,7 @@ export function Sidebar(p: Props) {
     const common: [string, () => void][] = [
       ["Rename", () => setEditing(e)],
       ["Move to…", () => setMoving(e)],
-      ["Show in Finder", () => void host.revealInFinder(e.path)],
+      [`Show in ${fileManager}`, () => void host.revealInFinder(e.path)],
       ["Delete", () => {
         const what = e.kind === "folder" ? `the folder "${name}" and everything in it` : `"${name}"`;
         if (confirm(`Move ${what} to the vault's .trash folder?`)) p.onDelete(e.path, e.kind);
