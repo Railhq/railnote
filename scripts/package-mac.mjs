@@ -3,8 +3,8 @@
 // The main process and pages are bundled, so the app carries only the build output.
 //
 // Signing: with APPLE_SIGN_IDENTITY set (e.g. "Developer ID Application: Name (TEAMID)") the app
-// is signed with the hardened runtime, and with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and
-// APPLE_TEAM_ID also set it is notarized. Without them it is signed ad hoc, which runs only on
+// is signed with the hardened runtime, and with APPLE_KEYCHAIN_PROFILE also set (a profile saved
+// by `xcrun notarytool store-credentials`) it is notarized. Without them it is signed ad hoc, which runs only on
 // the Mac that built it.
 import { packager } from "@electron/packager";
 import { execFileSync } from "child_process";
@@ -21,11 +21,8 @@ const arches = (
 ).split(",");
 const { version } = JSON.parse(fs.readFileSync("package.json", "utf8"));
 const identity = process.env.APPLE_SIGN_IDENTITY;
-const notarize =
-  identity &&
-  process.env.APPLE_ID &&
-  process.env.APPLE_APP_SPECIFIC_PASSWORD &&
-  process.env.APPLE_TEAM_ID;
+const profile = process.env.APPLE_KEYCHAIN_PROFILE;
+const notarize = identity && profile;
 const keep =
   /^\/(package\.json|dist|dist-electron|dist-export|build\/icon\.png)(\/|$)/;
 
@@ -59,11 +56,7 @@ async function build(arch) {
       : {}),
     ...(notarize
       ? {
-          osxNotarize: {
-            appleId: process.env.APPLE_ID,
-            appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
-            teamId: process.env.APPLE_TEAM_ID,
-          },
+          osxNotarize: { keychainProfile: profile },
         }
       : {}),
   });
@@ -126,12 +119,8 @@ async function build(arch) {
           "notarytool",
           "submit",
           `${base}.dmg`,
-          "--apple-id",
-          process.env.APPLE_ID,
-          "--password",
-          process.env.APPLE_APP_SPECIFIC_PASSWORD,
-          "--team-id",
-          process.env.APPLE_TEAM_ID,
+          "--keychain-profile",
+          profile,
           "--wait",
         ],
         { stdio: "inherit" },

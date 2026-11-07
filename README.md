@@ -133,7 +133,7 @@ Explainers play through [`@opencanviz/player`](https://www.npmjs.com/package/@op
 
 The renderer only talks to the host through the `HostApi` interface in `shared/types.ts`. The desktop host is the Electron preload; the phone host is `src/web/host.ts`, which keeps the vault in IndexedDB. Both sync through `shared/sync.ts`.
 
-A signed, notarized release needs a Developer ID Application certificate in the keychain and these set when running `release:mac`: `APPLE_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Upload the `.dmg` and `.zip` files to a GitHub release named for the version (`v0.1.0`); installed apps find it through update.electronjs.org.
+A signed, notarized release needs a Developer ID Application certificate in the keychain and, when running `release:mac`, `APPLE_SIGN_IDENTITY` set to it and `APPLE_KEYCHAIN_PROFILE` set to a profile saved with `xcrun notarytool store-credentials`. Upload the `.dmg` and `.zip` files to a GitHub release named for the version (`v0.1.0`); installed apps find it through update.electronjs.org.
 
 ## License
 
