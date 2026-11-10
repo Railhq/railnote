@@ -14,6 +14,7 @@
     "build:web": "vite build -c vite.web.config.ts",
     "sync-server": "node server/sync-server.mjs",
     "test:sync": "node test/sync.test.mjs",
+    "test:gitsync": "node test/gitsync.test.mjs",
     "package": "npm run build && node scripts/package-mac.mjs",
     "release:mac": "npm run build && node scripts/package-mac.mjs --release",
     "release:linux": "npm run build && node scripts/package-linux.mjs",

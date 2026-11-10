@@ -316,20 +316,19 @@ const EVERY = 30_000;
 const AFTER_CHANGE = 2_000;
 
 /**
- * Keeps one vault in sync, wherever its files live: a round when it opens, half a minute after the last one, and two
- * seconds after anything in the vault changes. Rounds never overlap; a change during one
- * queues another.
+ * Runs sync rounds for one vault: one when it opens, half a minute after the last one, and two
+ * seconds after anything in the vault changes. Rounds never overlap; a change during one queues
+ * another. `once` does the work of a round and returns the conflict copies it made.
  */
-export class SyncLoop {
-  private client?: SyncClient;
+export class RoundLoop {
   private timer?: ReturnType<typeof setTimeout>;
   private running = false;
   private again = false;
   private stopped = false;
   status: SyncStatus;
 
-  constructor(private store: SyncStore, private cfg: SyncConfig, private emit: (s: SyncStatus, conflicts?: string[]) => void) {
-    this.status = { on: true, link: syncLink(cfg), state: "idle" };
+  constructor(private once: () => Promise<string[]>, status: SyncStatus, private emit: (s: SyncStatus, conflicts?: string[]) => void) {
+    this.status = status;
   }
 
   start() {
@@ -369,9 +368,8 @@ export class SyncLoop {
     this.running = true;
     this.set({ state: "syncing" });
     try {
-      this.client ??= await SyncClient.connect(this.cfg);
-      const r = await syncOnce(this.client, this.cfg, this.store);
-      this.set({ state: "idle", last: Date.now(), error: undefined }, r.conflicts.length ? r.conflicts : undefined);
+      const conflicts = await this.once();
+      this.set({ state: "idle", last: Date.now(), error: undefined }, conflicts.length ? conflicts : undefined);
     } catch (e) {
       this.set({ state: "error", error: (e as Error).message });
     } finally {
@@ -382,6 +380,21 @@ export class SyncLoop {
       } else this.schedule(EVERY);
     }
     return this.status;
+  }
+}
+
+/** Keeps one vault in sync through a Railnote sync server, wherever its files live. */
+export class SyncLoop extends RoundLoop {
+  constructor(store: SyncStore, cfg: SyncConfig, emit: (s: SyncStatus, conflicts?: string[]) => void) {
+    let client: SyncClient | undefined;
+    super(
+      async () => {
+        client ??= await SyncClient.connect(cfg);
+        return (await syncOnce(client, cfg, store)).conflicts;
+      },
+      { on: true, via: "server", link: syncLink(cfg), state: "idle" },
+      emit,
+    );
   }
 }
 

@@ -92,8 +92,12 @@ export type VersionSource = "original" | "app" | "outside" | "synced" | "before-
 /** Where sync stands for the open vault. The passphrase never comes back from the host. */
 export interface SyncStatus {
   on: boolean;
+  /** Through a Railnote sync server, or through a GitHub (or any git) repository. */
+  via?: "server" | "github";
   /** What another device enters, with the passphrase, to join. */
   link?: string;
+  /** The repository, when syncing through one. */
+  remote?: string;
   state?: "idle" | "syncing" | "error";
   /** When the last round finished. */
   last?: number;
@@ -106,6 +110,14 @@ export interface SyncSetup {
   /** Or a link from a device already syncing, to join its space. */
   link?: string;
   passphrase: string;
+}
+
+export interface GitInfo {
+  git: boolean;
+  /** The GitHub CLI, signed in, so Railnote can make the repository. */
+  gh: boolean;
+  /** The vault's origin, if it's already a repository with one. */
+  remote?: string;
 }
 
 /** One saved version of a note, kept in the vault's .railnote/history. */
@@ -159,6 +171,10 @@ export interface HostApi {
   syncStatus(): Promise<SyncStatus>;
   turnOnSync(setup: SyncSetup): Promise<SyncStatus>;
   turnOffSync(): Promise<SyncStatus>;
+  /** Whether git and the GitHub CLI are installed, and the vault's repository if it has one. Computers only. */
+  gitInfo(): Promise<GitInfo>;
+  /** Syncs the vault through a repository: the one given, the vault's own, or a new private one made with gh. */
+  turnOnGitSync(remote: string): Promise<SyncStatus>;
   syncNow(): Promise<SyncStatus>;
   /** Each change of sync status, with any conflict copies the round made. */
   onSyncEvent(cb: (e: { status: SyncStatus; conflicts?: string[] }) => void): () => void;

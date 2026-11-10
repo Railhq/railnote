@@ -229,6 +229,10 @@ export const webHost: HostApi = {
     await startSync();
     return OFF;
   },
+  gitInfo: async () => ({ git: false, gh: false }),
+  turnOnGitSync: async () => {
+    throw new Error("Syncing with GitHub works on a computer. Turn it on there, then use a Railnote sync server for this phone.");
+  },
   syncNow: async () => (loop ? loop.now() : OFF),
   onSyncEvent: syncEvents.on,
   onVaultEvent: vaultEvents.on,

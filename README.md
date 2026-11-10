@@ -46,6 +46,12 @@ Sync keeps a vault the same on every computer and phone you use, through a small
 - **Conflicts.** Edits on two devices to the same note while apart keep both: yours stays, and the other device's text sits beside it as `Note (conflict 2026-10-29).md`. An edit wins over a delete.
 - **What stays local.** Version history is kept per computer (`.railnote/` never syncs). The phone has no version history or PDF export; Ask and Organize work there with an API key set on the phone (a computer uses your coding agent instead), which is then stored in the browser.
 
+### Sync with GitHub instead
+
+On a computer you can skip the server and keep the vault in a GitHub repository (or any git remote). Settings, Sync, **GitHub**: enter `you/notes` or the repository's address, or leave it empty to have Railnote make a private repository with the GitHub CLI (`gh auth login` first). Railnote commits a couple of seconds after each change, pulls every half minute, and pushes with the git login you already have, so there's no new account and no passphrase. Each commit says which computer it came from, so the repository's history is a full record of your notes.
+
+Conflicts work as above: yours stays, the other computer's text goes beside it, and an edit wins over a delete. `.railnote/` and `.trash/` stay out of the repository. Notes in the repository aren't encrypted, so keep it private. Phones can't sync with GitHub yet; use a sync server for those.
+
 ### Run a sync server
 
 ```bash

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AgentInfo, AiChoice, Settings, SyncStatus } from "../../shared/types";
+import type { AgentInfo, AiChoice, GitInfo, Settings, SyncStatus } from "../../shared/types";
 import { host } from "../workspace";
 import type { PluginEntry } from "../plugins/loader";
 
@@ -301,7 +301,9 @@ export function syncLine(s: SyncStatus | null) {
 /** Sync applies right away too: turning it on talks to the server, so it can't wait for Save. */
 function SyncSettings() {
   const [status, setStatus] = useState<SyncStatus | null>(null);
-  const [mode, setMode] = useState<"start" | "join">("start");
+  const [mode, setMode] = useState<"start" | "join" | "github">("start");
+  const [git, setGit] = useState<GitInfo | null>(null);
+  const [repo, setRepo] = useState("");
   const [server, setServer] = useState("");
   const [link, setLink] = useState("");
   const [pass, setPass] = useState("");
@@ -326,7 +328,31 @@ function SyncSettings() {
       setBusy(false);
     }
   };
+  const pick = (m: typeof mode) => {
+    setMode(m);
+    setError(null);
+    if (m === "github" && !git)
+      void host.gitInfo().then((g) => {
+        setGit(g);
+        setRepo((r) => r || g.remote || "");
+      });
+  };
   if (!status) return null;
+  if (status.on && status.via === "github")
+    return (
+      <>
+        <h4>Sync</h4>
+        <p className="muted small">
+          {syncLine(status)}
+          {status.state === "error" && status.error ? `: ${status.error}` : "."} Through <strong>{status.remote}</strong>, a couple of seconds after each change and every half minute. Version history and the trash stay on this computer.
+        </p>
+        <p className="muted small">On another computer, open its copy of the vault (or an empty folder), choose GitHub here, and enter the same repository.</p>
+        <div className="sync-actions">
+          <button className="mini" disabled={busy} onClick={() => act(() => host.syncNow())}>Sync now</button>
+          <button className="mini" disabled={busy} onClick={() => act(() => host.turnOffSync())}>Stop syncing with GitHub</button>
+        </div>
+      </>
+    );
   if (status.on)
     return (
       <>
@@ -356,32 +382,58 @@ function SyncSettings() {
     <>
       <h4>Sync</h4>
       <div className="seg sync-mode" role="tablist">
-        <button role="tab" aria-selected={mode === "start"} className={mode === "start" ? "on" : ""} onClick={() => setMode("start")}>Start syncing this vault</button>
-        <button role="tab" aria-selected={mode === "join"} className={mode === "join" ? "on" : ""} onClick={() => setMode("join")}>Join from another device</button>
+        <button role="tab" aria-selected={mode === "start"} className={mode === "start" ? "on" : ""} onClick={() => pick("start")}>Start syncing this vault</button>
+        <button role="tab" aria-selected={mode === "join"} className={mode === "join" ? "on" : ""} onClick={() => pick("join")}>Join from another device</button>
+        {host.kind !== "phone" && <button role="tab" aria-selected={mode === "github"} className={mode === "github" ? "on" : ""} onClick={() => pick("github")}>GitHub</button>}
       </div>
-      {mode === "start" ? (
-        <label className="field">Sync server<input value={server} placeholder="https://sync.example.com" onChange={(e) => setServer(e.target.value)} /></label>
-      ) : (
-        <label className="field">Link from the other device<input value={link} placeholder="https://sync.example.com#…" onChange={(e) => setLink(e.target.value)} /></label>
+      {mode === "github" ? <GitHubSetup git={git} repo={repo} setRepo={setRepo} busy={busy} error={error} onStart={() => act(() => host.turnOnGitSync(repo.trim()))} /> : (
+        <>
+          {mode === "start" ? (
+            <label className="field">Sync server<input value={server} placeholder="https://sync.example.com" onChange={(e) => setServer(e.target.value)} /></label>
+          ) : (
+            <label className="field">Link from the other device<input value={link} placeholder="https://sync.example.com#…" onChange={(e) => setLink(e.target.value)} /></label>
+          )}
+          <label className="field">
+            Passphrase {short && <span className="muted">(at least 8 characters)</span>}
+            <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
+          </label>
+          {mode === "start" && (
+            <label className="field">
+              Passphrase again {mismatch && <span className="muted">(doesn't match)</span>}
+              <input type="password" value={again} onChange={(e) => setAgain(e.target.value)} />
+            </label>
+          )}
+          <p className="muted small">
+            {mode === "start"
+              ? "Notes are encrypted on each device with this passphrase. The server can't read them, and nobody can recover them if it's lost, so keep it somewhere safe."
+              : "Join into an empty vault if you can. Notes already here that differ from the other device's are kept, with the other device's text beside them as a conflict copy."}
+          </p>
+          {error && <p className="sync-error" role="alert">{error}</p>}
+          <button className="mini" disabled={busy || !ready} onClick={() => act(() => host.turnOnSync(mode === "join" ? { link: link.trim(), passphrase: pass } : { server: server.trim(), passphrase: pass }))}>
+            {busy ? "Connecting…" : mode === "start" ? "Start syncing" : "Join"}
+          </button>
+        </>
       )}
+    </>
+  );
+}
+
+/** The GitHub tab: which repository, made with gh when the field is left empty. */
+function GitHubSetup({ git, repo, setRepo, busy, error, onStart }: { git: GitInfo | null; repo: string; setRepo: (r: string) => void; busy: boolean; error: string | null; onStart: () => void }) {
+  if (git && !git.git)
+    return <p className="muted small">Syncing with GitHub needs git. Install it (on a Mac, run <code>xcode-select --install</code> in Terminal), then open Settings again.</p>;
+  return (
+    <>
       <label className="field">
-        Passphrase {short && <span className="muted">(at least 8 characters)</span>}
-        <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
+        Repository
+        <input value={repo} placeholder={git?.gh ? "Leave empty to make a new private one" : "you/notes or https://github.com/you/notes"} onChange={(e) => setRepo(e.target.value)} autoCapitalize="off" spellCheck={false} />
       </label>
-      {mode === "start" && (
-        <label className="field">
-          Passphrase again {mismatch && <span className="muted">(doesn't match)</span>}
-          <input type="password" value={again} onChange={(e) => setAgain(e.target.value)} />
-        </label>
-      )}
       <p className="muted small">
-        {mode === "start"
-          ? "Notes are encrypted on each device with this passphrase. The server can't read them, and nobody can recover them if it's lost, so keep it somewhere safe."
-          : "Join into an empty vault if you can. Notes already here that differ from the other device's are kept, with the other device's text beside them as a conflict copy."}
+        {git?.gh ? "Railnote uses your GitHub CLI login. Leave this empty and it makes a private repository named after the vault." : "Make an empty private repository on GitHub, then enter it here. Railnote pushes with the git login you already use."} It commits a couple of seconds after each change and pulls every half minute. GitHub can read what's in the repository, so keep it private.
       </p>
       {error && <p className="sync-error" role="alert">{error}</p>}
-      <button className="mini" disabled={busy || !ready} onClick={() => act(() => host.turnOnSync(mode === "join" ? { link: link.trim(), passphrase: pass } : { server: server.trim(), passphrase: pass }))}>
-        {busy ? "Connecting…" : mode === "start" ? "Start syncing" : "Join"}
+      <button className="mini" disabled={busy || !git?.git || (!repo.trim() && !git.gh)} onClick={onStart}>
+        {busy ? "Connecting…" : "Sync with GitHub"}
       </button>
     </>
   );

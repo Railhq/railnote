@@ -24,7 +24,7 @@ let shellPath: Promise<string> | undefined;
 const win = process.platform === "win32";
 
 /** An app opened from the Dock gets a bare PATH; the user's login shell knows where the agents live. */
-function userPath(): Promise<string> {
+export function userPath(): Promise<string> {
   return (shellPath ??= new Promise((resolve) => {
     // Windows apps get the user's full PATH already, and there's no login shell to ask.
     if (win) return resolve([process.env.PATH || "", path.join(process.env.USERPROFILE || "", ".local", "bin")].join(path.delimiter));
@@ -40,7 +40,7 @@ function userPath(): Promise<string> {
 /** On Windows a command is a file with one of PATHEXT's extensions, such as claude.exe or codex.cmd. */
 const EXTS = win ? (process.env.PATHEXT || ".EXE;.CMD;.BAT").split(";").filter((e) => /^\.(exe|cmd|bat)$/i.test(e)) : [""];
 
-async function which(bin: string): Promise<string | null> {
+export async function which(bin: string): Promise<string | null> {
   for (const dir of (await userPath()).split(path.delimiter)) {
     if (!dir) continue;
     for (const ext of EXTS) {

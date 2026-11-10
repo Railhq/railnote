@@ -10,7 +10,7 @@ import type { SyncConfig } from "../shared/sync";
 import { IGNORED, Vault, createStarterVault, installAgentSkills } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
 import { askAgent, defaultAgent, listAgents, organizeWithAgent } from "./agents";
-import { setUpSync, syncVault } from "./sync";
+import { gitInfo, gitSyncVault, setUpGitHub, setUpSync, syncVault } from "./sync";
 import { updateElectronApp } from "update-electron-app";
 import squirrelStartup from "electron-squirrel-startup";
 
@@ -45,8 +45,8 @@ const DEFAULTS: Settings = {
 };
 
 const settingsFile = () => path.join(app.getPath("userData"), "settings.json");
-/** Settings plus what only the main process may read: each vault's sync passphrase. */
-let settings: Settings & { sync?: Record<string, SyncConfig> } = { ...DEFAULTS };
+/** Settings plus what only the main process may read: each vault's sync passphrase, or the repository it syncs through. */
+let settings: Settings & { sync?: Record<string, SyncConfig>; git?: Record<string, { remote: string }> } = { ...DEFAULTS };
 const SKILLS = path.join(__dirname, "skills");
 /** The app icon (build/icon.svg). A packaged app takes build/icon.icns from its bundle instead. */
 const ICON = path.join(__dirname, "..", "build", "icon.png");
@@ -68,19 +68,23 @@ async function saveSettings() {
 
 /** The renderer never sees the API key; it only learns whether one is set. */
 const publicSettings = (): Settings => {
-  const { sync: _, ...rest } = settings;
+  const { sync: _, git: __, ...rest } = settings;
   return { ...rest, anthropicApiKey: settings.anthropicApiKey ? "set" : undefined };
 };
 
-let sync: ReturnType<typeof syncVault> | undefined;
+let sync: ReturnType<typeof syncVault | typeof gitSyncVault> | undefined;
 const OFF: SyncStatus = { on: false };
 
 function startSync() {
   sync?.stop();
   sync = undefined;
-  const cfg = vault && settings.sync?.[vault.root];
-  if (!vault || !cfg) return;
-  sync = syncVault(vault, cfg, (status, conflicts) => win?.webContents.send("sync:event", { status, conflicts }));
+  if (!vault) return;
+  const emit = (status: SyncStatus, conflicts?: string[]) => win?.webContents.send("sync:event", { status, conflicts });
+  const repo = settings.git?.[vault.root];
+  const cfg = settings.sync?.[vault.root];
+  if (repo) sync = gitSyncVault(vault, repo.remote, emit);
+  else if (cfg) sync = syncVault(vault, cfg, emit);
+  else return;
   sync.start();
 }
 
@@ -238,10 +242,21 @@ function registerIpc() {
     startSync();
     return sync!.status;
   });
+  ipcMain.handle("sync:git:info", () => gitInfo(need().root));
+  ipcMain.handle("sync:git:on", async (_e, given: string) => {
+    const root = need().root;
+    const remote = await setUpGitHub(root, given);
+    settings.git = { ...settings.git, [root]: { remote } };
+    await saveSettings();
+    startSync();
+    return sync!.now();
+  });
   ipcMain.handle("sync:off", async () => {
     const root = need().root;
     const { [root]: _, ...rest } = settings.sync ?? {};
     settings.sync = rest;
+    const { [root]: __, ...repos } = settings.git ?? {};
+    settings.git = repos;
     await saveSettings();
     startSync();
     await fs.rm(path.join(root, ".railnote", "sync.json"), { force: true });
