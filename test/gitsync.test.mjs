@@ -58,6 +58,7 @@ ok(get(B, "Notes/b.md") === undefined, "a delete on A reached B");
 ok(c.length === 0 && (await gitSyncOnce(A, tools)).length === 0, "a quiet round does nothing");
 const log = execFileSync("git", ["log", "--format=%an <%ae>%n%s"], { cwd: A, env }).toString();
 ok(log.includes("Railnote <railnote@users.noreply.github.com>") && log.includes("Railnote sync from"), "commits say where they came from, with a fallback name");
+ok(log.includes(", with changes from other computers") && !/Merge remote-tracking|Conflicts/.test(log), "merges say so plainly, without git's conflict list");
 const same = JSON.stringify(ls(A).filter((p) => !/^\.(railnote|trash)/.test(p)).sort()) === JSON.stringify(ls(B).sort());
 ok(same, "both vaults hold the same files");
 

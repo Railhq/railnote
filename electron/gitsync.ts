@@ -28,6 +28,8 @@ export interface GitTools {
 /** Files that change all the time without being notes, or that stay on each computer. */
 const IGNORE = [".railnote/", ".trash/", ".DS_Store", ".obsidian/workspace*.json"];
 const MSG = `Railnote sync from ${os.hostname().replace(/\.local$/, "")}`;
+/** For merges, instead of git's own "Merge remote-tracking branch" and its list of conflicts. */
+const MERGED = `${MSG}, with changes from other computers`;
 
 function run(bin: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<string>;
 function run(bin: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, bytes: true): Promise<Buffer>;
@@ -135,7 +137,7 @@ async function resolve(root: string, git: Git, ident: string[]): Promise<string[
       await git(["add", "--", file]);
     } else await git(["rm", "--quiet", "--cached", "--", file]);
   }
-  await git([...ident, "commit", "--quiet", "--no-verify", "--no-edit"]);
+  await git([...ident, "commit", "--quiet", "--no-verify", "-m", MERGED]);
   return copies;
 }
 
@@ -153,7 +155,7 @@ export async function gitSyncOnce(root: string, tools: GitTools): Promise<string
   const localHas = await ok(git(["rev-parse", "--verify", "--quiet", "HEAD"]));
   let copies: string[] = [];
   if (remoteHas) {
-    const merge = () => git([...ident, "merge", "--quiet", "--no-edit", "--no-verify", "--allow-unrelated-histories", theirs]);
+    const merge = () => git([...ident, "merge", "--quiet", "--no-verify", "-m", MERGED, "--allow-unrelated-histories", theirs]);
     try {
       await merge();
     } catch (e) {
