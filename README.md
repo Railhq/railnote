@@ -6,6 +6,8 @@ Railnote keeps the part of Obsidian people love (a folder of plain `.md` files y
 
 Railnote is free and MIT licensed, with no account.
 
+![Railnote answering "What did we decide about pricing, and why?" from a vault's notes, with links to the notes it used](docs/screenshot.png)
+
 ## Download
 
 macOS 13 or later: get the `.dmg` for your Mac (Apple silicon `arm64`, or Intel `x64`) from [Releases](https://github.com/Railhq/railnote/releases), open it and drag Railnote into Applications. It updates itself from new releases.
