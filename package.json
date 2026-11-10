@@ -1,6 +1,6 @@
 {
   "name": "railnote",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Open-source Markdown notes that work out of the box",
   "license": "MIT",
   "main": "dist-electron/main.js",
