@@ -4,7 +4,7 @@ Open-source Markdown notes that work the moment you open them.
 
 Railnote keeps the part of Obsidian people love (a folder of plain `.md` files you own) and fixes the parts they complain about: the setup, the plugin hunt, the filing paralysis, and the missing AI. It opens an existing Obsidian vault as is.
 
-Railnote is free and MIT licensed, with no account.
+Railnote is free and MIT licensed, with no account. Website: [getrailhq.com/railnote](https://getrailhq.com/railnote/).
 
 ![Railnote answering "What did we decide about pricing, and why?" from a vault's notes, with links to the notes it used](docs/screenshot.png)
 
