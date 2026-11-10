@@ -34,6 +34,8 @@ const CREATE_KEY = process.env.CREATE_KEY || "";
 /** How many spaces this server holds at most, and how many one address may make in a day. */
 const MAX_SPACES = Number(process.env.MAX_SPACES || 1000);
 const CREATES_PER_DAY = Number(process.env.CREATES_PER_DAY || 5);
+/** Writes stop while the disk has less than this free, so a busy day can't fill a shared machine. */
+const MIN_FREE = Number(process.env.MIN_FREE_MB || 10240) * 1024 * 1024;
 /** Behind a reverse proxy, the client's address is in X-Real-IP (the proxy must overwrite it). */
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 
@@ -110,6 +112,16 @@ const json = (res, status, obj) => {
 const misses = new Map();
 const slow = (ip) => new Promise((r) => setTimeout(r, Math.min(5000, 250 * 2 ** Math.min(misses.get(ip) || 0, 5))));
 
+/** Free bytes on the data disk, checked at most every few seconds. */
+let disk = { at: 0, free: Infinity };
+async function diskFull(adding = 0) {
+  if (Date.now() - disk.at > 5000) {
+    const st = await fs.statfs(DATA);
+    disk = { at: Date.now(), free: st.bavail * st.bsize };
+  }
+  return disk.free - adding < MIN_FREE;
+}
+
 const creates = new Map();
 /** Counts a new space against its address; false once the day's allowance is used. */
 function made(ip) {
@@ -133,7 +145,8 @@ async function api(req, res, url) {
     const have = await load(id);
     if (have) return authorized(have, req) ? json(res, 200, { seq: have.meta.seq }) : (await slow(ip), json(res, 401, { error: "wrong token" }));
     if (!made(ip)) return json(res, 429, { error: "too many new spaces from this address today" });
-    if ((await fs.readdir(DATA)).filter((d) => SPACE.test(d)).length >= MAX_SPACES) return json(res, 507, { error: "this server is full" });
+    if ((await diskFull()) || (await fs.readdir(DATA)).filter((d) => SPACE.test(d)).length >= MAX_SPACES)
+      return json(res, 507, { error: "this server is full" });
     const s = new Space(id, { tokenHash: sha(m[1]).toString("hex"), seq: 0, files: {} });
     await fs.mkdir(path.join(s.dir, "files"), { recursive: true });
     await s.save();
@@ -178,6 +191,8 @@ async function api(req, res, url) {
       const current = f ? (f.deleted && base === 0 ? 0 : f.seq) : 0;
       if (base !== current) return json(res, 409, { seq: f?.seq ?? 0, deleted: !!f?.deleted });
       if (data && s.used() - (f && !f.deleted ? f.size : 0) + data.length > MAX_SPACE) return json(res, 507, { error: "space is full" });
+      if (data && (await diskFull(data.length))) return json(res, 507, { error: "this server is full" });
+      if (data) disk.free -= data.length;
       const seq = ++s.meta.seq;
       if (data) {
         await fs.writeFile(`${file}.tmp`, data);

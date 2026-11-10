@@ -11,8 +11,10 @@ services:
     restart: unless-stopped
     environment:
       TRUST_PROXY: "1"
-      MAX_SPACE_MB: "1024"
+      MAX_SPACE_MB: "500"
       MAX_SPACES: "500"
+      # The droplet also runs Demorail and Seorail: keep 15 GB free for them whatever happens here.
+      MIN_FREE_MB: "15360"
     volumes:
       - data:/data
     networks: [edge]
