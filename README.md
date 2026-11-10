@@ -21,8 +21,8 @@ Windows 10 or later (x64): run `Railnote-<version>-win-x64-setup.exe`. It instal
 | Common complaint | What Railnote does |
 |---|---|
 | Hours of setup and plugin hunting before it's useful | One click creates a starter vault with an inbox, daily notes, templates and a welcome note. Daily notes, tasks, templates, search, backlinks and an outline are built in. |
-| "Where does this note go?" | New notes land in `Inbox/`. **Organize** asks Claude for a folder, tags and related notes; you tick what to apply. |
-| No built-in AI | **Ask** answers questions from your own notes and cites them as `[[links]]`. Search runs locally; only the best-matching passages are sent. |
+| "Where does this note go?" | New notes land in `Inbox/`. **Organize** asks your agent for a folder, tags and related notes; you tick what to apply. |
+| No built-in AI | **Ask** answers questions from your own notes and cites them as `[[links]]`. It runs through the coding agent you already use (Claude Code, Codex or OpenCode), which reads the notes in the vault on your own plan, with no API key. |
 | Tasks scattered across notes | The **Tasks** view collects every `- [ ]` in the vault. Ticking one edits the file. |
 | Sharing a note means sharing the app | **Export to HTML** makes one self-contained page with pictures, fonts, diagrams and playing explainers inside it. **Export to PDF** prints the same page, explainers shown at their last frame. |
 | The graph is a hairball | **Graph** draws the vault as a transit map: each top-level folder is a line, each note a station on a grid, and notes linked across folders are interchanges. Point at a station to see its links; narrow to the notes 1 to 3 links from the one you're on. **Web** switches to a free-floating layout. |
