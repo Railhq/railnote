@@ -346,6 +346,8 @@ function createWindow() {
     minWidth: 720,
     minHeight: 480,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    // Level with the tab line, whose stops are centred 15px down.
+    trafficLightPosition: { x: 20, y: 8 },
     backgroundColor: "#1e1e1e",
     icon: ICON,
     show: !process.env.RAILNOTE_HEADLESS,

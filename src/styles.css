@@ -72,6 +72,8 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 
 .app { display: grid; grid-template-columns: 264px 1fr; height: 100%; }
 .app.folded { grid-template-columns: 60px 1fr; }
+/* The Mac window buttons run to 88px, past the folded rail, so the first pane's tabs start after them. */
+.app.mac.folded .pane:first-child .tabbar { padding-left: 46px; }
 
 /* Folded: a slim rail, with the full sidebar peeking out over the page. */
 .sidebar.slim { align-items: center; gap: 4px; padding-bottom: 10px; }

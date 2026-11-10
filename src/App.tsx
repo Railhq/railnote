@@ -19,7 +19,7 @@ import { SourceView } from "./components/SourceView";
 import { NotePane, PaneHandle } from "./components/NotePane";
 import { GraphView } from "./components/GraphView";
 import { exportNote, type ExportKind } from "./export/export";
-import { keys } from "../shared/keys";
+import { keys, mac } from "../shared/keys";
 
 type Overlay = null | "switcher" | "commands" | "templates" | "settings" | { organize: string } | { history: string };
 
@@ -438,7 +438,7 @@ export function App() {
   };
 
   return (
-    <div className={`app${folded || narrow ? " folded" : ""}${narrow ? " narrow" : ""}`}>
+    <div className={`app${folded || narrow ? " folded" : ""}${narrow ? " narrow" : ""}${mac && host.kind === "desktop" ? " mac" : ""}`}>
       <Sidebar folded={folded || narrow} narrow={narrow} onFold={fold} ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} syncLine={syncLine(sync)} syncError={sync?.state === "error" ? sync.error : undefined} onSyncNow={() => void host.syncNow()} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
         {view !== "note" && <div className="drag-region" />}

@@ -1,5 +1,5 @@
 /** Shortcut labels are written the Mac way ("⇧⌘F"); elsewhere they read "Ctrl+Shift+F". */
-const mac =
+export const mac =
   typeof process !== "undefined" && process.platform
     ? process.platform === "darwin"
     : typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
