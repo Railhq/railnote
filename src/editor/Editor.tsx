@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { autocompletion, closeBrackets, CompletionContext, CompletionResult } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import type { MarkdownConfig } from "@lezer/markdown";
 import { languages } from "@codemirror/language-data";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
@@ -12,6 +13,25 @@ import { blockPreview, inlinePreview, refreshPreview } from "./live-preview";
 import { editorHooks, EditorHooks, OpenWhere, whereFrom } from "./hooks";
 import type { VaultIndex } from "../lib/vault-index";
 import { plugins } from "../plugins/host";
+
+/**
+ * A line that only closes an HTML tag, like </details>, ends there. Markdown's rule runs the HTML on
+ * to the next blank line, which leaves a heading written straight under it as raw text.
+ */
+const closingTagLine: MarkdownConfig = {
+  parseBlock: [
+    {
+      name: "ClosingTagLine",
+      before: "HTMLBlock",
+      parse(cx, line) {
+        if (!/^ {0,3}(<\/[a-z][\w-]*\s*>\s*)+$/i.test(line.text)) return false;
+        cx.addElement(cx.elt("HTMLBlock", cx.lineStart, cx.lineStart + line.text.length));
+        cx.nextLine();
+        return true;
+      },
+    },
+  ],
+};
 
 const highlight = HighlightStyle.define([
   { tag: t.heading1, fontWeight: "700" },
@@ -134,7 +154,7 @@ export function Editor(props: EditorProps) {
         drawSelection(),
         closeBrackets(),
         EditorView.lineWrapping,
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [closingTagLine] }),
         syntaxHighlighting(highlight),
         highlightSelectionMatches(),
         autocompletion({ override: [wikilinkCompletions(props.index)], icons: false }),

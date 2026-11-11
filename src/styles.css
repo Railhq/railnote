@@ -708,3 +708,7 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .rn-html p { margin: 0.4em 0; }
 .tree-files { display: block; margin: 10px 0 4px 8px; background: none; border: none; padding: 4px 6px; color: var(--muted); font-size: 12px; }
 .tree-files:hover { color: var(--ink); }
+.cm-rn-fence-open { font-family: var(--sans); font-size: 11px; line-height: 1.6; color: var(--muted); padding-top: 4px !important; }
+.cm-rn-fence-open .rn-callout-label { font-weight: 400; color: var(--muted); }
+.cm-rn-fence-close { font-size: 0; line-height: 6px; }
+.rn-html pre { overflow-x: auto; max-width: 100%; }

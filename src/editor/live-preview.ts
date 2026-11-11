@@ -115,10 +115,22 @@ function buildInline(view: EditorView): DecorationSet {
           return;
         }
         if (name === "FencedCode" || name === "CodeBlock") {
+          const first = state.doc.lineAt(node.from), last = state.doc.lineAt(node.to);
+          let editing = false;
+          for (let n = first.number; n <= last.number && !editing; n++) editing = active.has(n);
+          // Out of the block, the ``` fences fold away: the opening one to its language, the closing one to nothing.
+          const fold = name === "FencedCode" && !editing;
+          const closes = last.number > first.number && /^\s*(`{3,}|~{3,})\s*$/.test(last.text);
           for (let p = node.from; p <= node.to; ) {
             const line = state.doc.lineAt(p);
-            decos.push(Decoration.line({ class: "cm-rn-codeblock" }).range(line.from));
+            const edge = fold && (line.number === first.number ? " cm-rn-fence-open" : line.number === last.number && closes ? " cm-rn-fence-close" : "");
+            decos.push(Decoration.line({ class: `cm-rn-codeblock${edge || ""}` }).range(line.from));
             p = line.to + 1;
+          }
+          if (fold) {
+            const lang = /^\s*(?:`{3,}|~{3,})\s*([\w+#.-]*)/.exec(first.text)?.[1] ?? "";
+            if (first.to > first.from) decos.push(Decoration.replace({ widget: new CalloutLabel(lang) }).range(first.from, first.to));
+            if (closes && last.to > last.from) decos.push(Decoration.replace({}).range(last.from, last.to));
           }
           return false;
         }
