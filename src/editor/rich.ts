@@ -303,3 +303,45 @@ export class NoteEmbedWidget extends WidgetType {
     return true;
   }
 }
+
+/** A block of raw HTML, such as <details>, drawn the way Obsidian does, with the Markdown inside it. */
+export class HtmlWidget extends WidgetType {
+  constructor(readonly source: string, readonly from: number) {
+    super();
+  }
+
+  eq(o: HtmlWidget) {
+    return o.source === this.source;
+  }
+
+  updateDOM(dom: HTMLElement, _view: EditorView, from: HtmlWidget) {
+    if (from.source !== this.source) return false;
+    return true;
+  }
+
+  toDOM(view: EditorView) {
+    const hooks = view.state.facet(editorHooks);
+    const wrap = document.createElement("div");
+    wrap.className = "rn-html";
+    const resolveFile = (s: string) => hooks.resolveFile(s)?.path ?? null;
+    wrap.innerHTML = renderNote(this.source, { resolveFile, resolveNote: hooks.resolveNote, noteContent: hooks.noteContent }, 1);
+    cleanHtml(wrap);
+    loadFiles(wrap, view);
+    // Opening or closing a <details> changes the height the editor measured.
+    wrap.addEventListener("toggle", () => view.requestMeasure(), true);
+    wrap.addEventListener("mousedown", (e) => {
+      if (followLinks(view, e)) return;
+      const t = e.target as HTMLElement;
+      // A summary opens its details; links and form controls do their own thing.
+      if (t.closest("summary, a, input, button, select, textarea, label")) return;
+      e.preventDefault();
+      view.dispatch({ selection: { anchor: this.from } });
+      view.focus();
+    });
+    return wrap;
+  }
+
+  ignoreEvent() {
+    return true;
+  }
+}
