@@ -443,7 +443,22 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .rn-link, .rn-ext, .sources a { color: var(--link); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, var(--signal) 55%, transparent); }
 .sources { font-size: 11px; color: var(--muted); }
 .sources a { margin-right: 6px; }
-.ask-input { margin: 0 22px; min-height: 64px; resize: none; }
+.ask-compose { margin: 0 22px; display: flex; flex-direction: column; gap: 6px; }
+.ask-input { min-height: 64px; resize: none; }
+.ask-edits { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+.ask-edits:has(input:checked) { color: var(--ink-2); }
+.ask-edits input { accent-color: var(--signal); margin: 0; }
+.ask-working { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.ask-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); animation: ask-pulse 1.1s ease-in-out infinite; }
+@keyframes ask-pulse { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .ask-pulse { animation: none; } }
+.ask-elapsed { font-variant-numeric: tabular-nums; opacity: 0.7; }
+.ask-changes { list-style: none; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.ask-changes li { display: flex; align-items: center; gap: 8px; }
+.ask-changes a { color: var(--link); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.ask-change-kind { color: var(--muted); min-width: 56px; font-size: 12px; }
+.ask-changes .muted { margin-left: auto; font-size: 12px; }
+.ask-changes button { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 
 /* ---------- overlays ---------- */
 .overlay { position: fixed; inset: 0; background: rgba(15, 28, 24, 0.4); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; z-index: 50; }

@@ -555,7 +555,7 @@ export function App() {
           </div>
         )}
         {view === "source" && sourcePath && <SourceView key={sourcePath} path={sourcePath} backLabel={note?.name ?? "note"} onBack={() => setView("note")} />}
-        <AskSheet ws={ws} open={asking} onClose={() => setAsking(false)} onOpen={(p) => void open(p)} onOpenLink={(t) => void openLink(t)} />
+        <AskSheet ws={ws} open={asking} onClose={() => setAsking(false)} onOpen={(p) => void open(p)} onOpenLink={(t) => void openLink(t)} onDelete={(p) => remove(p)} settings={settings} onSettings={setSettings} />
       </main>
 
       {overlay === "switcher" && <Palette placeholder="Jump to a note, or type a new name" items={switcherItems} onClose={() => setOverlay(null)} />}

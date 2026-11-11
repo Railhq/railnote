@@ -84,6 +84,8 @@ interface RunOptions {
   /** Extra instructions, sent as a system prompt where the agent takes one. */
   system: string;
   onText?: (delta: string) => void;
+  /** What the agent is doing right now, such as "Reading math.md", for the window to show while it works. */
+  onStep?: (step: string) => void;
   /** Claude Code only: the JSON schema its final answer must match. */
   schema?: object;
   /** The agent's model, when not its own default. */
@@ -113,6 +115,29 @@ function args(id: AgentId, cwd: string, prompt: string, o: RunOptions): string[]
       // The plan agent can read and search but not change files.
       return ["run", ...(o.model ? ["-m", o.model] : []), "--format", "json", "--dir", cwd, ...(o.edit ? [] : ["--agent", "plan"]), `${o.system}\n\n${prompt}`];
   }
+}
+
+/** One tool call, said plainly. Paths are shown relative to the vault. */
+function describeStep(cwd: string, tool: string, input: any): string | undefined {
+  const file = (p?: string) => (p ? path.relative(cwd, path.resolve(cwd, p)) || p : "");
+  const target = input?.file_path ?? input?.filePath ?? input?.path;
+  switch (tool.toLowerCase()) {
+    case "read":
+      return target ? `Reading ${file(target)}` : "Reading your notes";
+    case "grep":
+      return input?.pattern ? `Searching for “${input.pattern}”` : "Searching your notes";
+    case "glob":
+    case "list":
+    case "ls":
+      return "Looking through your folders";
+    case "edit":
+    case "multiedit":
+    case "patch":
+      return target ? `Editing ${file(target)}` : "Editing a note";
+    case "write":
+      return target ? `Writing ${file(target)}` : "Writing a note";
+  }
+  return undefined;
 }
 
 /** Pulls a readable message out of an agent's error, which is sometimes JSON inside a string. */
@@ -150,6 +175,7 @@ export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunO
     text += t;
     o.onText?.(t);
   };
+  const step = (s?: string) => s && o.onStep?.(s);
   // Separates what the agent says between tool calls ("Let me look…") from what follows.
   const block = () => text && !text.endsWith("\n\n") && say("\n\n");
 
@@ -167,16 +193,21 @@ export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunO
         const ev = e.event;
         if (ev?.type === "content_block_start" && ev.content_block?.type === "text") block();
         else if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") say(ev.delta.text);
+      } else if (e.type === "assistant") {
+        for (const c of e.message?.content ?? []) if (c.type === "tool_use") step(describeStep(cwd, c.name ?? "", c.input));
       } else if (e.type === "result") {
         if (e.is_error || e.subtype !== "success") failure = message(e.result || e.errors?.join("; ") || e.subtype);
         structured = e.structured_output;
       }
     } else if (id === "codex") {
       if (e.type === "item.completed" && e.item?.type === "agent_message") (block(), say(e.item.text));
+      else if (e.type === "item.started" && e.item?.type === "command_execution") step("Reading your notes");
+      else if (e.type === "item.started" && e.item?.type === "file_change") step(e.item.changes?.[0]?.path ? `Editing ${path.relative(cwd, e.item.changes[0].path)}` : "Editing a note");
       else if (e.type === "turn.failed") failure = message(e.error?.message ?? e.error);
       else if (e.type === "error") failure = message(e.message);
     } else {
       if (e.type === "text" && e.part?.text) (block(), say(e.part.text));
+      else if (e.type === "tool_use" && e.part?.tool) step(describeStep(cwd, e.part.tool, e.part.state?.input));
       else if (e.type === "error") failure = message(e.error ?? e.part ?? e.message);
     }
   });
@@ -209,9 +240,9 @@ If the notes don't contain the answer, say so plainly and suggest what note migh
 ${edit ? "You may create and edit notes when the user asks you to; say which notes you changed." : "Don't change any files; this is read-only."}
 Keep answers short and concrete. Use Markdown. Don't narrate your searching.`;
 
-export async function askAgent(id: AgentId, vault: string, question: string, hints: string[], edit: boolean, model: string | undefined, onText: (t: string) => void) {
+export async function askAgent(id: AgentId, vault: string, question: string, hints: string[], edit: boolean, model: string | undefined, onText: (t: string) => void, onStep?: (s: string) => void) {
   const prompt = hints.length ? `${question}\n\n(Railnote's own search suggests these notes may be relevant: ${hints.join(", ")})` : question;
-  await runAgent(id, vault, prompt, { edit, system: ASK_SYSTEM(edit), onText, model });
+  await runAgent(id, vault, prompt, { edit, system: ASK_SYSTEM(edit), onText, onStep, model });
 }
 
 const ORGANIZE_SYSTEM = `You are filing a note inside Railnote, a Markdown notes app. The current directory is the user's notes vault.

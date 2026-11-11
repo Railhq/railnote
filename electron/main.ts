@@ -5,7 +5,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { Readable } from "stream";
-import type { AgentId, OrganizeRequest, PluginManifest, Settings, AskSource, SyncSetup, SyncStatus } from "../shared/types";
+import type { AgentId, OrganizeRequest, PluginManifest, Settings, AskSource, AskChange, SyncSetup, SyncStatus } from "../shared/types";
 import type { SyncConfig } from "../shared/sync";
 import { IGNORED, Vault, createStarterVault, installAgentSkills } from "./vault";
 import { DEFAULT_MODEL, ask, describeError, organize } from "./ai";
@@ -310,10 +310,22 @@ function registerIpc() {
     const send = (msg: object) => e.sender.send("ai:ask:event", { id, ...msg });
     const agent = await chosenAgent();
     const onDelta = (delta: string) => send({ delta });
+    const onStep = (step: string) => send({ step });
+    const edit = !!agent && !!settings.agentEdits;
+    // With edits on, the notes as they were, so the window can list what the agent changed and undo each one.
+    const before = edit ? await need().readAll().then((ns) => new Map(ns.map((n) => [n.path, n.content])), () => null) : null;
+    const changed = async () => {
+      if (!before) return undefined;
+      const after = new Map((await need().readAll()).map((n) => [n.path, n.content]));
+      const out: AskChange[] = [];
+      for (const [p, text] of after) if (before.get(p) !== text) out.push({ path: p, before: before.get(p) ?? null });
+      for (const [p, text] of before) if (!after.has(p)) out.push({ path: p, before: text, deleted: true });
+      return out;
+    };
     // Resolve the invoke right away; the answer streams back as events.
-    (agent ? askAgent(agent, need().root, question, sources.map((s) => s.path), !!settings.agentEdits, settings.agentModel || undefined, onDelta) : ask(settings.anthropicApiKey, settings.model, question, sources, onDelta))
-      .then(() => send({ done: true }))
-      .catch((err) => send({ error: describeError(err), done: true }));
+    (agent ? askAgent(agent, need().root, question, sources.map((s) => s.path), edit, settings.agentModel || undefined, onDelta, onStep) : ask(settings.anthropicApiKey, settings.model, question, sources, onDelta))
+      .then(async () => send({ done: true, changed: await changed().catch(() => undefined) }))
+      .catch(async (err) => send({ error: describeError(err), done: true, changed: await changed().catch(() => undefined) }));
   });
   ipcMain.handle("ai:organize", async (_e, req: OrganizeRequest) => {
     const agent = await chosenAgent();

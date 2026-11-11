@@ -121,6 +121,23 @@ export interface GitInfo {
 }
 
 /** One saved version of a note, kept in the vault's .railnote/history. */
+/** A note the agent changed while answering. `before` is its text beforehand, null when the agent made it. */
+export interface AskChange {
+  path: string;
+  before: string | null;
+  deleted?: boolean;
+}
+
+export interface AskEvent {
+  id: string;
+  delta?: string;
+  done?: boolean;
+  error?: string;
+  /** What the agent is doing while it works, such as "Reading math.md". */
+  step?: string;
+  changed?: AskChange[];
+}
+
 export interface NoteVersion {
   id: string;
   time: number;
@@ -182,7 +199,7 @@ export interface HostApi {
   /** Menu items the renderer acts on, such as "close-tab". */
   onMenuCommand(cb: (cmd: string) => void): () => void;
   ask(id: string, question: string, sources: AskSource[]): Promise<void>;
-  onAskEvent(cb: (e: { id: string; delta?: string; done?: boolean; error?: string }) => void): () => void;
+  onAskEvent(cb: (e: AskEvent) => void): () => void;
   organize(req: OrganizeRequest): Promise<OrganizeSuggestion>;
   /** Coding agents Railnote can use, and whether each is installed. None on the phone. */
   listAgents(): Promise<AgentInfo[]>;

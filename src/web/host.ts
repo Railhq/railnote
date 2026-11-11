@@ -6,7 +6,7 @@
 import { DEFAULT_MODEL, ask, describeError, organize } from "../../electron/ai";
 import { STARTER_FILES } from "../../shared/starter";
 import { SyncLoop, setUpSync, sha256, type SyncConfig, type SyncState, type SyncStore } from "../../shared/sync";
-import { isNotePath, type HostApi, type NoteFile, type Settings, type SyncStatus, type VaultEvent } from "../../shared/types";
+import { isNotePath, type AskEvent, type HostApi, type NoteFile, type Settings, type SyncStatus, type VaultEvent } from "../../shared/types";
 import { files, keepStorage, kv, type StoredFile } from "./store";
 
 const VAULT = "This phone";
@@ -28,7 +28,7 @@ function listeners<T>() {
 
 const vaultEvents = listeners<VaultEvent>();
 const syncEvents = listeners<{ status: SyncStatus; conflicts?: string[] }>();
-const askEvents = listeners<{ id: string; delta?: string; done?: boolean; error?: string }>();
+const askEvents = listeners<AskEvent>();
 
 type Private = Settings & { sync?: SyncConfig; opened?: boolean; folders?: string[] };
 const load = async (): Promise<Private> => ({ ...DEFAULTS, ...(await kv.get<Private>("settings")) });
