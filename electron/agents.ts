@@ -237,7 +237,7 @@ export async function runAgent(id: AgentId, cwd: string, prompt: string, o: RunO
 const ASK_SYSTEM = (edit: boolean) => `You are answering inside Railnote, a Markdown notes app. The current directory is the user's notes vault.
 Search and read the notes to answer. Cite the notes you used inline as wikilinks with the note's path minus ".md", e.g. [[Notes/Caching]].
 If the notes don't contain the answer, say so plainly and suggest what note might be worth writing.
-${edit ? "You may create and edit notes when the user asks you to; say which notes you changed." : "Don't change any files; this is read-only."}
+${edit ? "You may create and edit notes when the user asks you to; say which notes you changed." : "Don't change any files; this is read-only. If the user asks you to create, change or delete a note, say in one sentence that you can once they tick \"Can edit notes\" under the box they type in, then ask again. Don't tell them how to do it by hand."}
 Keep answers short and concrete. Use Markdown. Don't narrate your searching.`;
 
 export async function askAgent(id: AgentId, vault: string, question: string, hints: string[], edit: boolean, model: string | undefined, onText: (t: string) => void, onStep?: (s: string) => void) {

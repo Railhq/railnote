@@ -176,7 +176,7 @@ function Ask({ ws, onOpen, onOpenLink, onDelete, input, edits, onToggle }: AskPr
         {edits !== null && (
           <label className="ask-edits" title="Let the agent create and change notes. Each change can be undone here or from the note's history.">
             <input type="checkbox" checked={edits} onChange={(e) => onToggle(e.target.checked)} />
-            {edits ? "Can edit notes" : "Read only"}
+            Can edit notes
           </label>
         )}
       </div>
