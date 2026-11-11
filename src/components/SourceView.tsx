@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { closeBrackets } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
-import { bracketMatching, foldGutter, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { bracketMatching, foldGutter, HighlightStyle, LanguageDescription, syntaxHighlighting, type LanguageSupport } from "@codemirror/language";
+import { languages } from "@codemirror/language-data";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, lineNumbers } from "@codemirror/view";
@@ -16,7 +17,16 @@ const jsonColors = HighlightStyle.define([
   { tag: [t.brace, t.squareBracket, t.punctuation, t.separator], color: "var(--muted)" },
 ]);
 
-/** Plain-text editor for a non-note vault file, such as the JSON behind an embedded explainer. */
+const codeColors = HighlightStyle.define([
+  { tag: t.keyword, color: "#c678dd" },
+  { tag: [t.string, t.special(t.string)], color: "#98c379" },
+  { tag: [t.number, t.bool, t.null], color: "#d19a66" },
+  { tag: t.comment, color: "var(--muted)", fontStyle: "italic" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#61afef" },
+  { tag: [t.typeName, t.className], color: "#e5c07b" },
+]);
+
+/** Plain-text editor for a non-note vault file: the JSON behind an embedded explainer, a script, a .txt. */
 export function SourceView({ path, backLabel, onBack }: { path: string; backLabel: string; onBack(): void }) {
   const box = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string }>({ ok: true, text: "Loading…" });
@@ -34,7 +44,9 @@ export function SourceView({ path, backLabel, onBack }: { path: string; backLabe
     let timer: number | undefined;
     let saved = "";
     let alive = true;
+    const isJson = /\.json$/i.test(path);
     const check = (text: string) => {
+      if (!isJson) return null;
       try {
         JSON.parse(text);
         return null;
@@ -53,9 +65,11 @@ export function SourceView({ path, backLabel, onBack }: { path: string; backLabe
       if (alive) setStatus(bad ? { ok: false, text: `Saved, but the JSON isn't valid yet: ${bad}` } : { ok: true, text: "Saved" });
     };
     saveNow.current = save;
-    host
-      .readRaw(path)
-      .then((text) => {
+    const lang: Promise<LanguageSupport | null> = isJson
+      ? Promise.resolve(json())
+      : (LanguageDescription.matchFilename(languages, path)?.load() ?? Promise.resolve(null)).catch(() => null);
+    Promise.all([host.readRaw(path), lang])
+      .then(([text, support]) => {
         if (!alive || !box.current) return;
         saved = text;
         const bad = check(text);
@@ -72,8 +86,8 @@ export function SourceView({ path, backLabel, onBack }: { path: string; backLabe
               closeBrackets(),
               bracketMatching(),
               highlightSelectionMatches(),
-              json(),
-              syntaxHighlighting(jsonColors),
+              support ?? [],
+              syntaxHighlighting(isJson ? jsonColors : codeColors),
               keymap.of([
                 { key: "Escape", run: () => (void leave(), true) },
                 { key: "Mod-s", run: () => (void save(), true) },

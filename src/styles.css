@@ -178,16 +178,16 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .crumb-line { width: 14px; height: 3px; border-radius: 2px; background: var(--track); flex-shrink: 0; }
 .crumb-file { margin-left: 4px; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; }
 .note-actions { display: flex; gap: 2px; flex: none; }
-.note-head .ghost { opacity: 0.55; }
-.note-head .ghost:hover, .note-head .ghost:focus-visible { opacity: 1; }
-.title-add { display: block; flex: none; max-width: 708px; width: 100%; margin: 6px auto 0; padding: 0 56px 4px !important; color: var(--muted); }
+.note-head .ghost { color: var(--ink-2); border-color: var(--line); }
+.note-head .ghost:hover, .note-head .ghost:focus-visible { color: var(--ink); border-color: var(--muted); }
+.title.title-add { display: block; flex: none; max-width: 708px; width: 100%; margin: 6px auto 0; padding: 0 56px 4px !important; color: var(--muted); }
 .title-add:focus { color: var(--ink); }
 .title {
   flex: 1; font-family: var(--serif); font-size: 34px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15;
   background: none; border: none; border-bottom: 1px solid transparent; border-radius: 0; padding: 0 0 4px; min-width: 0;
 }
 .title:hover { border-bottom-color: var(--line); }
-.title:focus { border-bottom-color: var(--signal); }
+.title:focus, .title:focus-visible { border-bottom-color: var(--signal); outline: none; }
 .banner {
   margin: 4px auto 10px; max-width: 708px; width: calc(100% - 112px); background: var(--paper-2);
   border-left: 3px solid var(--signal); border-radius: 0 6px 6px 0; padding: 9px 12px; display: flex; gap: 8px; align-items: center;
@@ -706,3 +706,5 @@ h4 { margin: 18px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
 .rn-html summary:hover { color: var(--ink); }
 .rn-html > :first-child, .rn-html details > :nth-child(2) { margin-top: 4px; }
 .rn-html p { margin: 0.4em 0; }
+.tree-files { display: block; margin: 10px 0 4px 8px; background: none; border: none; padding: 4px 6px; color: var(--muted); font-size: 12px; }
+.tree-files:hover { color: var(--ink); }

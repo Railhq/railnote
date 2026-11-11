@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NoteFile, Settings, SyncStatus } from "../shared/types";
+import { stripNoteExt, type NoteFile, type Settings, type SyncStatus } from "../shared/types";
 import { setLinkResolver } from "./editor/live-preview";
 import type { OpenWhere } from "./editor/hooks";
 import { plugins } from "./plugins/host";
 import { PluginEntry, syncPlugins } from "./plugins/loader";
-import { extOf, noteFolder } from "./lib/vault-index";
+import { extOf, noteFolder, TEXT_EXT } from "./lib/vault-index";
 import { folderLines, lineColour } from "./lib/lines";
 import { closeTab, cycle, emptyLayout, Layout, moveTab, place, retarget, unsplit } from "./lib/layout";
 import { host, Workspace } from "./workspace";
@@ -126,6 +126,9 @@ export function App() {
     await Promise.all(handles.current.map((h) => h?.flush()));
   }, []);
   const flushRef = useRef(flush);
+  // Links to files open them; openFile is defined further down, after the views it switches.
+  const openFileRef = useRef<(p: string) => Promise<void>>(async () => {});
+  const switchVaultRef = useRef<() => Promise<void>>(async () => {});
   flushRef.current = flush;
 
   const open = useCallback(
@@ -147,10 +150,10 @@ export function App() {
       const [name, heading] = target.split("#");
       // [[report.pdf]] and other attachments open in their own app, never as a new note.
       const ext = extOf(name);
-      if (ext && ext !== "md") {
+      if (ext && ext !== "md" && ext !== "mdx") {
         const p = ws.index.resolveFile(name, noteFolder(currentRef.current ?? ""));
         if (!p) return setNotice(`Couldn't find ${name} in this vault.`);
-        return host.openInSystem(p).catch((e) => setNotice((e as Error).message));
+        return openFileRef.current(p);
       }
       const p = await ws.resolveOrCreate(name || ws.index.notes.get(currentRef.current ?? "")?.name || "");
       const h = heading ? ws.index.notes.get(p)?.parsed.headings.find((x) => x.text.toLowerCase() === heading.trim().toLowerCase()) : undefined;
@@ -234,6 +237,7 @@ export function App() {
       const p = l.panes[l.focus]?.active;
       if (cmd === "close-tab" && p) void closeRef.current(l.focus, p);
       if (cmd === "history" && p) void showHistoryRef.current(p);
+      if (cmd === "open-vault") void switchVaultRef.current();
       if ((cmd === "export-html" || cmd === "export-pdf") && p) void exportRef.current(p, cmd === "export-html" ? "html" : "pdf");
     });
     return () => {
@@ -300,14 +304,28 @@ export function App() {
       setLayout(retarget(layoutRef.current, (x) => moved.get(x) ?? x));
     }
   };
-  const openFile = (p: string) => void host.openInSystem(p).catch((e) => setNotice((e as Error).message));
+  const openFile = async (p: string) => {
+    if (!TEXT_EXT.has(extOf(p))) return void host.openInSystem(p).catch((e) => setNotice((e as Error).message));
+    await flush();
+    setSourcePath(p);
+    setView("source");
+  };
+  openFileRef.current = openFile;
+  const switchVault = async () => {
+    const dir = await host.chooseVault();
+    if (!dir) return;
+    await flush();
+    setOverlay(null);
+    openVault(await host.openVault(dir));
+  };
+  switchVaultRef.current = switchVault;
   const renameNote = async (path: string, name: string) => {
     if (!ws) return;
     const n = ws.index.notes.get(path);
     if (!n || !name.trim() || name.trim() === n.name) return;
     await flush();
     try {
-      const to = ws.uniquePath(n.folder, name.trim());
+      const to = ws.uniquePath(n.folder, name.trim(), /\.mdx$/.test(path) ? ".mdx" : ".md");
       carryPosition(path, to);
       await ws.rename(path, to);
       setLayout(retarget(layoutRef.current, (x) => (x === path ? to : x)));
@@ -408,6 +426,7 @@ export function App() {
     ...(current ? [{ id: "close-tab", label: "Close tab", hint: "⌘W", run: () => void close(layout.focus, current) }] : []),
     { id: "tpl", label: "Insert template…", hint: "⌘T", run: () => setOverlay("templates") },
     { id: "settings", label: "Settings", hint: "⌘,", run: () => setOverlay("settings") },
+    ...(host.kind !== "phone" ? [{ id: "vault", label: "Open another vault…", hint: "⌥⌘O", run: () => void switchVault() }] : []),
     {
       id: "agent-skills",
       label: "Teach agents to edit explainers",
@@ -439,7 +458,7 @@ export function App() {
 
   return (
     <div className={`app${folded || narrow ? " folded" : ""}${narrow ? " narrow" : ""}${mac && host.kind === "desktop" ? " mac" : ""}`}>
-      <Sidebar folded={folded || narrow} narrow={narrow} onFold={fold} ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} syncLine={syncLine(sync)} syncError={sync?.state === "error" ? sync.error : undefined} onSyncNow={() => void host.syncNow()} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
+      <Sidebar folded={folded || narrow} narrow={narrow} onFold={fold} ws={ws} current={current} view={view} onOpen={(p, where) => open(p, undefined, where)} onView={setView} onNew={newNote} onDaily={daily} onSettings={() => setOverlay("settings")} onAsk={() => setAsking(true)} syncLine={syncLine(sync)} syncError={sync?.state === "error" ? sync.error : undefined} onSyncNow={() => void host.syncNow()} onDelete={remove} onMove={moveEntry} onOpenFile={openFile} searchKey={searchKey} />
       <main className="main">
         {view !== "note" && <div className="drag-region" />}
         {view === "home" && <HomeView ws={ws} route={layout.panes[layout.focus].tabs.filter((t) => ws.index.notes.has(t))} here={layout.panes[layout.focus].active} onDaily={daily} onOpen={(p, line) => void open(p, line)} onOrganize={organize} onView={setView} />}
@@ -478,7 +497,7 @@ export function App() {
                         onAuxClick={(e) => e.button === 1 && void close(i, t)}
                       >
                         <span className="stop-dot" aria-hidden="true" />
-                        <span className="tab-name">{ws.index.notes.get(t)?.name ?? t.replace(/^.*\//, "").replace(/\.md$/, "")}</span>
+                        <span className="tab-name">{ws.index.notes.get(t)?.name ?? stripNoteExt(t.replace(/^.*\//, ""))}</span>
                         <button
                           className="tab-x"
                           aria-label={`Close ${t}`}
@@ -569,13 +588,7 @@ export function App() {
             ws.settings = s;
             setPluginList(await syncPlugins(s, await host.listVaultPlugins()));
           }}
-          onSwitchVault={async () => {
-            const dir = await host.chooseVault();
-            if (!dir) return;
-            await flush();
-            setOverlay(null);
-            openVault(await host.openVault(dir));
-          }}
+          onSwitchVault={switchVault}
         />
       )}
       {overlay && typeof overlay === "object" && "history" in overlay && (

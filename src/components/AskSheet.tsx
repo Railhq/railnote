@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { stripNoteExt } from "../../shared/types";
 import { renderMarkdown } from "../lib/markdown";
 import { excerpt } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
@@ -90,7 +91,7 @@ function Ask({ ws, onOpen, onOpenLink, input }: Props & { input: React.RefObject
               <div className="sources">
                 Searched:{" "}
                 {t.sources.map((s) => (
-                  <a key={s} onClick={() => onOpen(s)}>{s.replace(/\.md$/, "")}</a>
+                  <a key={s} onClick={() => onOpen(s)}>{stripNoteExt(s)}</a>
                 ))}
               </div>
             )}

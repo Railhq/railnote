@@ -1,4 +1,4 @@
-import type { HostApi, OrganizeSuggestion, Settings } from "../shared/types";
+import { isNotePath, stripNoteExt, type HostApi, type OrganizeSuggestion, type Settings } from "../shared/types";
 import { setFrontmatterTags, LINK_RE } from "./lib/parse";
 import { VaultIndex, escapeRe, noteFolder, noteName } from "./lib/vault-index";
 
@@ -20,10 +20,10 @@ export class Workspace {
     this.index.upsert({ path, content, mtime: Date.now() });
   }
 
-  uniquePath(folder: string, base: string): string {
+  uniquePath(folder: string, base: string, ext = ".md"): string {
     const clean = base.replace(/[\\/:*?"<>|#^\[\]]/g, " ").replace(/\s+/g, " ").trim() || "Untitled";
-    let p = join(folder, `${clean}.md`);
-    for (let i = 2; this.index.notes.has(p); i++) p = join(folder, `${clean} ${i}.md`);
+    let p = join(folder, `${clean}${ext}`);
+    for (let i = 2; this.index.notes.has(p); i++) p = join(folder, `${clean} ${i}${ext}`);
     return p;
   }
 
@@ -69,7 +69,7 @@ export class Workspace {
     if (this.index.notes.has(to)) throw new Error(`${to} already exists`);
     const oldName = noteName(from);
     const newName = noteName(to);
-    const pathKey = from.replace(/\.md$/, "");
+    const pathKey = stripNoteExt(from);
     await host.rename(from, to);
     const moved = this.index.notes.get(from);
     this.index.remove(from);
@@ -77,7 +77,7 @@ export class Workspace {
 
     if (oldName !== newName || noteFolder(from) !== noteFolder(to)) {
       const re = new RegExp(`(!?)\\[\\[(${escapeRe(oldName)}|${escapeRe(pathKey)})(#[^\\]|\\n]*)?(\\|[^\\]\\n]*)?\\]\\]`, "gi");
-      const target = this.index.resolve(newName) === to ? newName : to.replace(/\.md$/, "");
+      const target = this.index.resolve(newName) === to ? newName : stripNoteExt(to);
       for (const n of this.index.all()) {
         if (!n.parsed.links.length) continue;
         const next = n.content.replace(re, (_m, bang, _t, head = "", alias = "") => `${bang}[[${target}${head}${alias}]]`);
@@ -140,9 +140,9 @@ export class Workspace {
       let next = n.content.replace(/(!?)\[\[([^\]|#\n]+)([^\]\n]*)\]\]/g, (m, bang, target: string, rest) => {
         const t = target.trim();
         if (!t.includes("/")) return m;
-        const md = !/\.[\w-]+$/.test(t) || t.endsWith(".md");
-        const hit = map(md && !t.endsWith(".md") ? t + ".md" : t);
-        return hit ? `${bang}[[${md && !t.endsWith(".md") ? hit.replace(/\.md$/, "") : hit}${rest}]]` : m;
+        const bare = !/\.[\w-]+$/.test(t);
+        const hit = bare ? (map(t + ".md") ?? map(t + ".mdx")) : map(t);
+        return hit ? `${bang}[[${bare ? stripNoteExt(hit) : hit}${rest}]]` : m;
       });
       next = next.replace(/(!\[[^\]]*\]\()<?([^)\s>]+)>?\)/g, (m, head, href: string) => {
         if (/^\w+:/.test(href)) return m;
@@ -170,7 +170,7 @@ export class Workspace {
     const add = pick.links.filter((l) => !existing.has(l.toLowerCase()));
     if (add.length) content = content.replace(/\s*$/, "") + `\n\n## Related\n${add.map((l) => `- [[${l}]]`).join("\n")}\n`;
     if (content !== n.content) await this.write(path, content);
-    if (pick.folder && s.folder !== n.folder) return this.rename(path, this.uniquePath(s.folder, n.name));
+    if (pick.folder && s.folder !== n.folder) return this.rename(path, this.uniquePath(s.folder, n.name, /\.mdx$/.test(path) ? ".mdx" : ".md"));
     return path;
   }
 
@@ -179,7 +179,7 @@ export class Workspace {
     const out = new Map<string, string[]>();
     for (const n of this.index.notes.values()) {
       for (const l of n.parsed.links) {
-        if (/\.\w+$/.test(l.target) && !l.target.endsWith(".md")) continue;
+        if (/\.\w+$/.test(l.target) && !isNotePath(l.target)) continue;
         if (!this.index.resolve(l.target)) out.set(l.target, [...(out.get(l.target) ?? []), n.path]);
       }
     }

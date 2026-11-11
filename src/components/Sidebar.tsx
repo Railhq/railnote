@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { stripNoteExt } from "../../shared/types";
 import { fileName, noteFolder, type Note } from "../lib/vault-index";
 import { host, type Workspace } from "../workspace";
 import { whereFrom, type OpenWhere } from "../editor/hooks";
@@ -22,6 +23,7 @@ interface Props {
   onNew(folder?: string): void;
   onDaily(): void;
   onSettings(): void;
+  onAsk(): void;
   /** What the sync line under the tree says, or null with sync off. */
   syncLine?: string | null;
   syncError?: string;
@@ -42,6 +44,16 @@ interface Props {
 interface Tree {
   folders: Map<string, Tree>;
   items: { kind: "note" | "file"; path: string; name: string }[];
+}
+
+/** Every folder on the way down to each path's folder. */
+function ancestors(paths: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of paths) {
+    const parts = noteFolder(p) ? noteFolder(p).split("/") : [];
+    for (let i = 1; i <= parts.length; i++) out.add(parts.slice(0, i).join("/"));
+  }
+  return out;
 }
 
 function buildTree(notes: Note[], files: string[], folders: string[]): Tree {
@@ -113,7 +125,18 @@ export function Sidebar(p: Props) {
   }, [menu]);
   const inboxCount = idx.all().filter((n) => n.folder === p.ws.settings.inboxFolder).length;
   const openTasks = useMemo(() => idx.all().reduce((a, n) => a + n.parsed.tasks.filter((t) => !t.done).length, 0), [idx.version]);
-  const tree = useMemo(() => buildTree(idx.all(), [...idx.files.keys()], idx.folders()), [idx.version]);
+  // Attachments (photos, PDFs, scripts) stay out of the tree until asked for, and so do folders that hold nothing else.
+  const [showFiles, setShowFiles] = useState(() => { try { return localStorage.getItem("railnote:attachments") === "show"; } catch { return false; } });
+  const toggleFiles = () => {
+    setShowFiles(!showFiles);
+    try { localStorage.setItem("railnote:attachments", showFiles ? "hide" : "show"); } catch { /* per-viewer nicety only */ }
+  };
+  const tree = useMemo(() => {
+    const notes = idx.all(), files = [...idx.files.keys()];
+    if (showFiles) return buildTree(notes, files, idx.folders());
+    const withNotes = ancestors(notes.map((n) => n.path)), withFiles = ancestors(files);
+    return buildTree(notes, [], idx.folders().filter((f) => withNotes.has(f) || !withFiles.has(f)));
+  }, [idx.version, showFiles]);
   const results = useMemo(() => idx.searchText(query, 60), [query, idx.version]);
 
   const toggle = (k: string) => setClosed((s) => {
@@ -151,7 +174,7 @@ export function Sidebar(p: Props) {
     setEditing(null);
     const name = raw.trim().replace(/[\\/:*?"<>|]/g, " ");
     if (!name) return;
-    const full = e.kind === "note" ? `${name}.md` : name;
+    const full = e.kind === "note" ? `${name}${/\.mdx$/.test(e.path) ? ".mdx" : ".md"}` : name;
     if (full === fileName(e.path)) return;
     await move(e, joinPath(parentOf(e.path), full));
   };
@@ -257,7 +280,7 @@ export function Sidebar(p: Props) {
 
   const menuItems = (e: Entry | null): [string, () => void][] => {
     if (!e) return [["New note", () => onNew("")], ["New folder", () => void newFolder("")]];
-    const name = e.kind === "note" ? fileName(e.path).replace(/\.md$/, "") : fileName(e.path);
+    const name = e.kind === "note" ? stripNoteExt(fileName(e.path)) : fileName(e.path);
     const common: [string, () => void][] = [
       ["Rename", () => setEditing(e)],
       ["Move to…", () => setMoving(e)],
@@ -292,6 +315,9 @@ export function Sidebar(p: Props) {
       <button className={`slim-btn${p.view === "graph" ? " on" : ""}`} onClick={() => onView("graph")} title={keys("Graph (⌥⌘G)")} aria-label="Graph">
         <svg viewBox="0 0 20 20"><path d="M4 15 9 10h7" /><circle cx="4" cy="15" r="2" /><circle cx="9.5" cy="10" r="2" /><circle cx="16" cy="10" r="2" /></svg>
       </button>
+      <button className="slim-btn" onClick={p.onAsk} title={keys("Ask your notes (⌘J)")} aria-label="Ask your notes">
+        <svg viewBox="0 0 20 20"><path d="M4 4.5h12v8.5h-6.5L6 16v-3H4z" /><path d="M8.2 7.6a1.8 1.8 0 1 1 2.4 1.7c-.4.2-.6.5-.6.9" /><circle cx="10" cy="11.4" r=".4" /></svg>
+      </button>
       {/* The folders as a strip of line colours; pointing at it opens the full map of notes. */}
       <button className={`slim-lines${peek ? " on" : ""}`} onMouseEnter={p.narrow ? undefined : peekSoon} onMouseLeave={stayPut} onClick={() => setPeek(p.narrow ? !peek : true)} title="Your notes" aria-label="Show your notes">
         {lines.map((l) => <i key={l} style={{ background: lineColour(lines, l + "/") }} title={l} />)}
@@ -325,6 +351,7 @@ export function Sidebar(p: Props) {
         <button className={p.view === "graph" ? "on" : ""} onClick={() => onView("graph")} title={keys("How your notes link up (⌥⌘G)")}>
           Graph
         </button>
+        <button onClick={p.onAsk} title={keys("Ask a question; your agent answers from the notes (⌘J)")}>Ask</button>
       </div>
       <div className="tabs">
         {(["files", "search", "tags"] as const).map((t) => (
@@ -337,6 +364,11 @@ export function Sidebar(p: Props) {
         {tab === "files" && (
           <div className={`tree-root${dropAt === "" ? " drop" : ""}`} onContextMenu={(ev) => openMenu(ev, null)} {...dropProps("")}>
             {renderTree(tree, "", 0)}
+            {idx.files.size > 0 && (
+              <button className="tree-files" onClick={toggleFiles} title="Photos, PDFs and other files that aren't notes">
+                {showFiles ? "Hide attachments" : `Show ${idx.files.size} attachment${idx.files.size === 1 ? "" : "s"}`}
+              </button>
+            )}
           </div>
         )}
         {tab === "search" && (

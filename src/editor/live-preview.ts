@@ -236,7 +236,7 @@ function buildInline(view: EditorView): DecorationSet {
         const target = m[2].trim();
         if (!target || plugins.embeds.has(extOf(target))) continue;
         const ext = extOf(target);
-        const known = ext && ext !== "md" ? !!state.facet(editorHooks).resolveFile(target) : resolveHook(target);
+        const known = ext && ext !== "md" && ext !== "mdx" ? !!state.facet(editorHooks).resolveFile(target) : resolveHook(target);
         const cls = `cm-rn-wikilink${known ? "" : " cm-rn-unresolved"}`;
         const attrs = { "data-link": target + (m[3] ?? "") };
         if (active.has(line.number)) {
@@ -356,7 +356,7 @@ function buildBlocks(state: EditorState): DecorationSet {
       else if (isMedia(ext)) {
         const hit = hooks.resolveFile(target);
         block(line.from, line.to, new MediaWidget(target, hit?.path ?? null, hit?.version ?? 0, embed[2]?.trim() ?? "", line.from));
-      } else if (!ext || ext === "md") {
+      } else if (!ext || ext === "md" || ext === "mdx") {
         const [name, heading] = target.split("#");
         const path = name ? hooks.resolveNote(name) : hooks.notePath;
         const content = path ? hooks.noteContent(path) : null;

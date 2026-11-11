@@ -192,7 +192,7 @@ export const NotePane = forwardRef<PaneHandle, Props>(function NotePane(p, ref) 
         <span className="crumb" title={path}>
           <i className="crumb-line" />
           {note.folder || "Vault"}
-          {title && title.text !== note.name && <span className="crumb-file">{note.name}.md</span>}
+          {title && title.text !== note.name && <span className="crumb-file">{path.replace(/^.*\//, "")}</span>}
         </span>
         <span className="note-actions">
           <button className="ghost" title={keys("Saved versions of this note (⇧⌘H)")} onClick={() => p.onHistory(path)}>History</button>

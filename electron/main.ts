@@ -337,6 +337,8 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
+        { label: "Open Vault…", accelerator: "CmdOrCtrl+Alt+O", click: send("open-vault") },
+        { type: "separator" },
         { label: "Version History…", accelerator: "CmdOrCtrl+Shift+H", click: send("history") },
         { type: "separator" },
         { label: "Export to HTML…", click: send("export-html") },

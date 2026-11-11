@@ -1,5 +1,5 @@
 import MiniSearch from "minisearch";
-import type { NoteFile, VaultListing } from "../../shared/types";
+import { stripNoteExt, type NoteFile, type VaultListing } from "../../shared/types";
 import { parse, Parsed } from "./parse";
 
 export interface Note extends NoteFile {
@@ -8,7 +8,7 @@ export interface Note extends NoteFile {
   parsed: Parsed;
 }
 
-export const noteName = (path: string) => path.replace(/^.*\//, "").replace(/\.md$/, "");
+export const noteName = (path: string) => stripNoteExt(path.replace(/^.*\//, ""));
 export const noteFolder = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 export const fileName = (path: string) => path.replace(/^.*\//, "");
 export const extOf = (name: string) => /\.([\w-]+)$/.exec(name)?.[1].toLowerCase() ?? "";
@@ -16,6 +16,12 @@ export const extOf = (name: string) => /\.([\w-]+)$/.exec(name)?.[1].toLowerCase
 export const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"]);
 export const AUDIO_EXT = new Set(["mp3", "wav", "m4a", "ogg", "flac"]);
 export const VIDEO_EXT = new Set(["mp4", "webm", "mov"]);
+/** Files Railnote opens in its own plain-text editor rather than another app. */
+export const TEXT_EXT = new Set([
+  "txt", "json", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "css", "scss", "html", "xml", "yaml", "yml", "toml", "ini", "cfg",
+  "csv", "tsv", "log", "sh", "bash", "zsh", "sql", "rb", "go", "rs", "java", "kt", "swift", "c", "h", "cpp", "hpp", "cs", "php",
+  "lua", "r", "tex", "bib", "ipynb",
+]);
 export const isMedia = (ext: string) => IMAGE_EXT.has(ext) || AUDIO_EXT.has(ext) || VIDEO_EXT.has(ext) || ext === "pdf";
 
 /** In-memory model of the vault: notes, link graph, tags, tasks and full-text search. */
@@ -110,7 +116,7 @@ export class VaultIndex {
     // Shortest path wins on duplicate names, matching Obsidian's "shortest path when possible".
     const sorted = [...this.notes.values()].sort((a, b) => a.path.length - b.path.length);
     for (const n of sorted) {
-      for (const k of [n.name, n.path.replace(/\.md$/, ""), n.path, ...n.parsed.aliases]) {
+      for (const k of [n.name, stripNoteExt(n.path), n.path, ...n.parsed.aliases]) {
         const key = k.toLowerCase();
         if (!this.byKey.has(key)) this.byKey.set(key, n.path);
       }

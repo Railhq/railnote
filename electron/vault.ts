@@ -1,7 +1,7 @@
 import fs, { constants } from "fs/promises";
 import path from "path";
 import chokidar, { FSWatcher } from "chokidar";
-import type { NoteFile, VaultEvent, VaultListing, VersionSource } from "../shared/types";
+import { isNotePath, type NoteFile, type VaultEvent, type VaultListing, type VersionSource } from "../shared/types";
 import { History } from "./history";
 import { STARTER_FILES } from "../shared/starter";
 
@@ -44,7 +44,7 @@ export class Vault {
         const rel = toPosix(path.relative(this.root, abs));
         if (IGNORED.test(rel) || ent.name.startsWith(".")) continue;
         if (ent.isDirectory()) await walk(abs);
-        else if (ent.name.endsWith(".md")) out.push(await this.readNote(rel));
+        else if (isNotePath(ent.name)) out.push(await this.readNote(rel));
       }
     };
     await walk(this.root);
@@ -87,7 +87,7 @@ export class Vault {
         if (ent.isDirectory()) {
           folders.push(rel);
           await walk(abs);
-        } else if (!ent.name.endsWith(".md")) files.push(rel);
+        } else if (!isNotePath(ent.name)) files.push(rel);
       }
     };
     await walk(this.root);
@@ -122,7 +122,7 @@ export class Vault {
 
   async write(rel: string, content: string, source: VersionSource = "app") {
     const abs = this.resolve(rel);
-    const note = rel.endsWith(".md");
+    const note = isNotePath(rel);
     if (note) {
       const was = await fs.readFile(abs, "utf8").catch(() => null);
       if (was !== null) await this.keep("observe", this.history.observe(rel, was));
@@ -136,7 +136,7 @@ export class Vault {
   /** Writes a file that arrived from another device. The watcher tells the window, as for any outside edit. */
   async writeSynced(rel: string, bytes: Uint8Array) {
     const abs = this.resolve(rel);
-    if (rel.endsWith(".md")) {
+    if (isNotePath(rel)) {
       const was = await fs.readFile(abs, "utf8").catch(() => null);
       if (was !== null) await this.keep("observe", this.history.observe(rel, was));
       this.syncedWrites.set(rel, Buffer.from(bytes).toString("utf8"));
@@ -171,7 +171,7 @@ export class Vault {
 
   async remove(rel: string) {
     // The last text of each note goes into its history, so a deleted note's versions end with it.
-    const notes = rel.endsWith(".md") ? [rel] : (await this.readAll()).map((n) => n.path).filter((p) => p.startsWith(rel + "/"));
+    const notes = isNotePath(rel) ? [rel] : (await this.readAll()).map((n) => n.path).filter((p) => p.startsWith(rel + "/"));
     for (const n of notes) {
       const text = await fs.readFile(this.resolve(n), "utf8").catch(() => null);
       if (text !== null) await this.keep("deleted", this.history.record(n, text, "deleted"));
@@ -189,7 +189,7 @@ export class Vault {
       awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 40 },
     });
     const upsert = async (abs: string) => {
-      if (!abs.endsWith(".md")) return;
+      if (!isNotePath(abs)) return;
       const rel = toPosix(path.relative(this.root, abs));
       try {
         const file = await this.readNote(rel);
@@ -206,12 +206,12 @@ export class Vault {
     const rel = (abs: string) => toPosix(path.relative(this.root, abs));
     const hidden = (r: string) => r.split("/").some((part) => part.startsWith("."));
     this.watcher
-      .on("add", (abs) => (abs.endsWith(".md") ? upsert(abs) : !hidden(rel(abs)) && emit({ type: "file", path: rel(abs), exists: true })))
-      .on("change", (abs) => (abs.endsWith(".md") ? upsert(abs) : !hidden(rel(abs)) && emit({ type: "file", path: rel(abs), exists: true })))
+      .on("add", (abs) => (isNotePath(abs) ? upsert(abs) : !hidden(rel(abs)) && emit({ type: "file", path: rel(abs), exists: true })))
+      .on("change", (abs) => (isNotePath(abs) ? upsert(abs) : !hidden(rel(abs)) && emit({ type: "file", path: rel(abs), exists: true })))
       .on("unlink", (abs) => {
         const r = rel(abs);
         if (hidden(r)) return;
-        if (!abs.endsWith(".md")) return emit({ type: "file", path: r, exists: false });
+        if (!isNotePath(abs)) return emit({ type: "file", path: r, exists: false });
         this.ownWrites.delete(r);
         emit({ type: "delete", path: r });
       })

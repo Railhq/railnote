@@ -188,3 +188,8 @@ export interface HostApi {
   listAgents(): Promise<AgentInfo[]>;
   openExternal(url: string): Promise<void>;
 }
+
+/** Notes are Markdown files; .mdx counts too, with its components left as text. */
+export const NOTE_EXT = /\.mdx?$/;
+export const isNotePath = (p: string) => NOTE_EXT.test(p);
+export const stripNoteExt = (p: string) => p.replace(NOTE_EXT, "");

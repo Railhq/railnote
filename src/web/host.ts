@@ -6,7 +6,7 @@
 import { DEFAULT_MODEL, ask, describeError, organize } from "../../electron/ai";
 import { STARTER_FILES } from "../../shared/starter";
 import { SyncLoop, setUpSync, sha256, type SyncConfig, type SyncState, type SyncStore } from "../../shared/sync";
-import type { HostApi, NoteFile, Settings, SyncStatus, VaultEvent } from "../../shared/types";
+import { isNotePath, type HostApi, type NoteFile, type Settings, type SyncStatus, type VaultEvent } from "../../shared/types";
 import { files, keepStorage, kv, type StoredFile } from "./store";
 
 const VAULT = "This phone";
@@ -58,12 +58,12 @@ const store: SyncStore = {
   },
   async write(path, bytes) {
     await put(path, bytes);
-    if (path.endsWith(".md")) vaultEvents.emit({ type: "upsert", file: toNote((await files.get(path))!) });
+    if (isNotePath(path)) vaultEvents.emit({ type: "upsert", file: toNote((await files.get(path))!) });
     else vaultEvents.emit({ type: "file", path, exists: true });
   },
   async remove(path) {
     await files.delete(path);
-    vaultEvents.emit(path.endsWith(".md") ? { type: "delete", path } : { type: "file", path, exists: false });
+    vaultEvents.emit(isNotePath(path) ? { type: "delete", path } : { type: "file", path, exists: false });
   },
   loadState: async () => (await kv.get<SyncState>("syncState")) ?? null,
   saveState: async (s) => void (await kv.set("syncState", s)),
@@ -88,7 +88,7 @@ window.addEventListener("online", () => loop?.poke());
 const changed = () => loop?.poke();
 
 async function notes() {
-  return (await files.all()).filter((f) => f.path.endsWith(".md") && !hidden(f.path)).map(toNote);
+  return (await files.all()).filter((f) => isNotePath(f.path) && !hidden(f.path)).map(toNote);
 }
 
 async function under(prefix: string) {
@@ -170,7 +170,7 @@ export const webHost: HostApi = {
     const all = (await files.all()).map((f) => f.path);
     const folders = new Set((await load()).folders ?? []);
     for (const p of all) for (let i = p.indexOf("/"); i > 0; i = p.indexOf("/", i + 1)) folders.add(p.slice(0, i));
-    return { files: all.filter((p) => !p.endsWith(".md") && !hidden(p)), folders: [...folders].filter((d) => !hidden(d)).sort() };
+    return { files: all.filter((p) => !isNotePath(p) && !hidden(p)), folders: [...folders].filter((d) => !hidden(d)).sort() };
   },
   async saveAttachment(folder, name, bytes) {
     const clean = name.replace(/[\\/:*?"<>|#^\[\]]/g, " ").replace(/\s+/g, " ").trim() || "file";

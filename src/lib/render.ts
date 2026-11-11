@@ -95,7 +95,7 @@ export function renderNote(src: string, opts: RenderOptions, depth = 0): string 
     renderer(t) {
       const { embed, target, heading, alias } = t as unknown as { embed: boolean; target: string; heading?: string; alias?: string };
       const ext = extOf(target);
-      if (embed && ext && ext !== "md") {
+      if (embed && ext && ext !== "md" && ext !== "mdx") {
         if (ext === "canviz") return `<div class="rn-explainer" data-src="${esc(target)}"></div>`;
         const path = opts.resolveFile(target);
         if (!path) return `<span class="rn-missing">${esc(target)}</span>`;
